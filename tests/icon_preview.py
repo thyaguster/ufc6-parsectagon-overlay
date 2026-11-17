@@ -57,6 +57,7 @@ parser.add_argument("--lobby-playstation",action="store_true")
 parser.add_argument("--lobby-staged",action="store_true")
 parser.add_argument("--lobby-account",action="store_true")
 parser.add_argument("--new-ui",action="store_true")
+parser.add_argument("--no-lobby",action="store_true")
 args=parser.parse_args()
 folder=args.folder.resolve()
 lobby_server=None
@@ -155,10 +156,11 @@ try:
     else:
         dll.MenuTestToggle();pump(.3)
     if args.new_ui:
-        for tab in range(5):
+        tab_count=4 if args.no_lobby else 5
+        for tab in range(tab_count):
             assert dll.MenuTestSnapshot()&0x100
             render(f"new-ui-tab-{tab}.png")
-            if tab<4:
+            if tab<tab_count-1:
                 dll.MenuTestButton(0x800,1);dll.MenuTestButton(0x800,0);pump(.08)
         dll.MenuTestLayoutStyle(2)
         render("new-ui-island-settings.png")

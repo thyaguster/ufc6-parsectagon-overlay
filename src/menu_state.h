@@ -1,5 +1,8 @@
 #ifndef UFC6_MENU_STATE_H
 #define UFC6_MENU_STATE_H
+#ifndef UFC6_ENABLE_LOBBY
+#define UFC6_ENABLE_LOBBY 1
+#endif
 #include <stdint.h>
 #include "overlay_preferences.h"
 #include "overlay_layout.h"
@@ -96,6 +99,13 @@ static void menu_return_setting(MenuState *s,int id){
     const int pages[]={PAGE_APPEARANCE,PAGE_CONTROLS,PAGE_GAME_SETTINGS,PAGE_TOOLS},counts[]={9,4,10,5};
     for(int p=0;p<4;++p)for(int i=0;i<counts[p];++i)if(menu_setting_id(pages[p],i)==id){s->page=pages[p];s->selection=i;return;}
     s->page=PAGE_SETTINGS_HOME;s->selection=0;
+}
+static int topbar_next_tab(int current,int dir){
+    int next=(current+TOPBAR_COUNT+dir)%TOPBAR_COUNT;
+#if !UFC6_ENABLE_LOBBY
+    if(next==TOPBAR_LOBBY)next=(next+TOPBAR_COUNT+dir)%TOPBAR_COUNT;
+#endif
+    return next;
 }
 static int topbar_tab_rows(int tab){
     switch(tab){
@@ -243,8 +253,12 @@ static int menu_close(MenuState *s,int action) {
     s->visible=0;s->draining=1;s->armed=0;s->capturing=0;s->key_capturing=0;s->online_takeover=0;s->lobby_columns=0;s->lobby_from_main=0;menu_cancel_shutdown(s);return action;
 }
 static void menu_open_lobby(MenuState *s,int from_main,uint32_t viewport_width){
+#if !UFC6_ENABLE_LOBBY
+    (void)s;(void)from_main;(void)viewport_width;return;
+#else
     s->page=PAGE_LOBBY_HOME;s->selection=0;s->armed=0;
     s->online_takeover=1;s->lobby_from_main=from_main;s->lobby_columns=lobby_columns_for_viewport(viewport_width);
+#endif
 }
 static int menu_tick(MenuState *s,uint32_t buttons,uint64_t now,int foreground) {
     int chord=(buttons&menu_shortcut(s))==menu_shortcut(s);
@@ -456,10 +470,10 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
     }
     if(s->page==PAGE_MAIN&&s->layout_style!=LAYOUT_CLASSIC){
         if(button==PAD_LB){
-            s->topbar_tab=(s->topbar_tab+TOPBAR_COUNT-1)%TOPBAR_COUNT;s->selection=0;return MENU_CHANGED;
+            s->topbar_tab=topbar_next_tab(s->topbar_tab,-1);s->selection=0;return MENU_CHANGED;
         }
         if(button==PAD_RB){
-            s->topbar_tab=(s->topbar_tab+1)%TOPBAR_COUNT;s->selection=0;return MENU_CHANGED;
+            s->topbar_tab=topbar_next_tab(s->topbar_tab,1);s->selection=0;return MENU_CHANGED;
         }
         if(button==PAD_LEFT||button==PAD_RIGHT){
             int dir=(button==PAD_RIGHT)?1:-1;
@@ -467,7 +481,7 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
                 int p=next_visible_preset(s->master_preset,button==PAD_LEFT);
                 apply_master_preset(s,p);return MENU_MASTER_PRESET_CHANGED;
             }
-            s->topbar_tab=(s->topbar_tab+TOPBAR_COUNT+dir)%TOPBAR_COUNT;
+            s->topbar_tab=topbar_next_tab(s->topbar_tab,dir);
             s->selection=0;
             return MENU_CHANGED;
         }

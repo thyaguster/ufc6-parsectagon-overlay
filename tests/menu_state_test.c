@@ -395,14 +395,14 @@ int main(void) {
     assert(menu_rows(&s)==11&&menu_setting_id(s.page,9)==SETTING_REPLACE_ONLINE);
     assert(menu_button(&s,PAD_A,1)==MENU_REPLACE_ONLINE_CHANGED&&!s.replace_online_tab&&!s.online_takeover&&!s.lobby_columns&&!s.lobby_from_main);
     menu_tick(&s,0,16030,1);assert(menu_button(&s,PAD_RIGHT,1)==MENU_REPLACE_ONLINE_CHANGED&&s.replace_online_tab);
-    s=(MenuState){.visible=1,.armed=1,.page=PAGE_MAIN,.layout_style=LAYOUT_TOPBAR,.topbar_tab=TOPBAR_SETTINGS,.selection=0,.master_preset=PRESET_GLASS};
+    s=(MenuState){.visible=1,.armed=1,.page=PAGE_MAIN,.layout_style=LAYOUT_TOPBAR,.topbar_tab=TOPBAR_SETTINGS,.selection=0,.master_preset=PRESET_OCTAGON_HUB};
     assert(menu_rows(&s)==4);
     assert(menu_button(&s,PAD_A,1)==MENU_MASTER_PRESET_CHANGED&&s.layout_style==LAYOUT_TOPBAR&&s.master_preset==PRESET_APEX);
     s.page=PAGE_APPEARANCE;s.selection=0;s.armed=1;
     assert(menu_rows(&s)==10&&menu_setting_id(s.page,0)==SETTING_MASTER_PRESET);
     assert(menu_button(&s,PAD_A,1)==MENU_MASTER_PRESET_CHANGED&&s.layout_style==LAYOUT_ISLAND);
     s.page=PAGE_APPEARANCE;s.selection=1;s.armed=1;
-    assert(menu_button(&s,PAD_A,1)==MENU_LAYOUT_STYLE_CHANGED&&s.layout_style==LAYOUT_TOPBAR&&s.master_preset==PRESET_CUSTOM);
+    assert(menu_button(&s,PAD_A,1)==MENU_LAYOUT_STYLE_CHANGED&&s.layout_style==LAYOUT_SIDEBLADE&&s.master_preset==PRESET_CUSTOM);
     s.page=PAGE_MAIN;s.topbar_tab=TOPBAR_ACTIONS;s.selection=3;s.armed=1;
     assert(menu_button(&s,PAD_A,1)==MENU_CHANGED&&s.page==PAGE_QUIT);
     s.page=PAGE_MAIN;s.selection=2;s.armed=1;

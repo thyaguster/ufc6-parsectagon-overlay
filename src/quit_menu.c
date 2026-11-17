@@ -468,9 +468,13 @@ static int foreground(void) {
 static volatile LONG online_frame_selected=-1,online_frame_tick;
 static volatile LONG online_frame_logged;
 __declspec(dllexport) BOOL Ufc6OnlineTabProbeRequest(void){
+#if !UFC6_ENABLE_LOBBY
+    return FALSE;
+#else
     if(!game_window||!IsWindowVisible(game_window)||IsIconic(game_window))return FALSE;
     EnterCriticalSection(&lock);int needed=!menu.visible&&!menu.draining;LeaveCriticalSection(&lock);
     return needed;
+#endif
 }
 __declspec(dllexport) void Ufc6OnlineTabFrame(const void *pixels,BOOL rgba){
     if(!pixels)return;
@@ -1616,11 +1620,13 @@ static void draw_sideblade_menu(HDC dc, RECT r, const MenuState *state, const Ov
     RECT b1 = { rail.left + 42, rail.top + 10, rail.right - 10, rail.top + 38 };
     text(dc, font_stat_label, L"PARSECTAGON", b1, theme->accent, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
-    for (int t = 0; t < TOPBAR_COUNT; ++t) {
-        RECT tb = { rail.left + 10, rail.top + 56 + t * 50, rail.right - 10, rail.top + 96 + t * 50 };
+    for (int t = 0, slot = 0; t < TOPBAR_COUNT; ++t) {
+        if (!UFC6_ENABLE_LOBBY && t == TOPBAR_LOBBY) continue;
+        RECT tb = { rail.left + 10, rail.top + 56 + slot * 50, rail.right - 10, rail.top + 96 + slot * 50 };
         int act = (t == state->topbar_tab);
         if (act) row_surface(dc, tb, style, style == 3 ? 12 : 6, theme->accent, theme->focus_border);
         text(dc, font_main, tabs[t], tb, act ? RGB(255,255,255) : theme->muted, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        ++slot;
     }
     wchar_t owner[32];
     if (owner_player > 0) swprintf(owner, 32, L"P%d Active", owner_player);
@@ -1665,15 +1671,18 @@ static void draw_bottomdock_menu(HDC dc, RECT r, const MenuState *state, const O
     RECT bn = { dock.left + 44, dock.top, dock.left + 150, dock.bottom };
     text(dc, font_stat_label, L"UFC 6", bn, theme->accent, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
-    int tab_x = dock.left + 146, tab_w = 102;
+    int visible_tabs = UFC6_ENABLE_LOBBY ? TOPBAR_COUNT : (TOPBAR_COUNT - 1);
+    int tab_x = dock.left + 146, tab_w = UFC6_ENABLE_LOBBY ? 102 : 128;
     controller_artwork_draw(dc, tab_x - 34, dock.top + 12, 28, 22, PAD_LB, ps);
-    for (int t = 0; t < TOPBAR_COUNT; ++t) {
-        RECT tb = { tab_x + t * (tab_w + 6), dock.top + 9, tab_x + (t + 1) * tab_w + t * 6, dock.bottom - 9 };
+    for (int t = 0, slot = 0; t < TOPBAR_COUNT; ++t) {
+        if (!UFC6_ENABLE_LOBBY && t == TOPBAR_LOBBY) continue;
+        RECT tb = { tab_x + slot * (tab_w + 6), dock.top + 9, tab_x + (slot + 1) * tab_w + slot * 6, dock.bottom - 9 };
         int act = (t == state->topbar_tab);
         if (act) row_surface(dc, tb, style, style == 3 ? 14 : 6, theme->accent, theme->focus_border);
         text(dc, font_small, tabs[t], tb, act ? RGB(255,255,255) : theme->muted, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        ++slot;
     }
-    controller_artwork_draw(dc, tab_x + TOPBAR_COUNT * (tab_w + 6) + 4, dock.top + 12, 28, 22, PAD_RB, ps);
+    controller_artwork_draw(dc, tab_x + visible_tabs * (tab_w + 6) + 4, dock.top + 12, 28, 22, PAD_RB, ps);
     wchar_t ow[32];
     if (owner_player > 0) swprintf(ow, 32, L"P%d", owner_player); else wcscpy(ow, has_owner ? L"P1" : L"--");
     RECT ob = { dock.right - 74, dock.top + 10, dock.right - 14, dock.bottom - 10 };
@@ -1694,11 +1703,13 @@ static void draw_bento_menu(HDC dc, RECT r, const MenuState *state, const Overla
     RECT bn = { left.left + 36, left.top + 2, left.right, left.top + 28 };
     text(dc, font_stat_label, L"PARSECTAGON", bn, theme->accent, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
-    for (int t = 0; t < TOPBAR_COUNT; ++t) {
-        RECT tb = { left.left, left.top + 44 + t * 44, left.right, left.top + 82 + t * 44 };
+    for (int t = 0, slot = 0; t < TOPBAR_COUNT; ++t) {
+        if (!UFC6_ENABLE_LOBBY && t == TOPBAR_LOBBY) continue;
+        RECT tb = { left.left, left.top + 44 + slot * 44, left.right, left.top + 82 + slot * 44 };
         int act = (t == state->topbar_tab);
         row_surface(dc, tb, style, style == 3 ? 12 : 6, act ? theme->accent : RGB(18, 22, 31), act ? theme->focus_border : theme->border);
         text(dc, font_small, tabs[t], tb, act ? RGB(255,255,255) : theme->muted, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        ++slot;
     }
 
     RECT stat1 = { left.left, left.bottom - 72, left.left + 106, left.bottom - 14 };
@@ -1735,12 +1746,14 @@ static void draw_broadcast_menu(HDC dc, RECT r, const MenuState *state, const Ov
     controller_artwork_draw(dc, card.right - 76, card.top + 11, 24, 20, PAD_LB, ps);
     controller_artwork_draw(dc, card.right - 46, card.top + 11, 24, 20, PAD_RB, ps);
 
-    int tx = card.left + 16, tw = 96;
-    for (int t = 0; t < TOPBAR_COUNT; ++t) {
-        RECT tb = { tx + t * (tw + 6), card.top + 44, tx + (t + 1) * tw + t * 6, card.top + 72 };
+    int tx = card.left + 16, tw = UFC6_ENABLE_LOBBY ? 96 : 121;
+    for (int t = 0, slot = 0; t < TOPBAR_COUNT; ++t) {
+        if (!UFC6_ENABLE_LOBBY && t == TOPBAR_LOBBY) continue;
+        RECT tb = { tx + slot * (tw + 6), card.top + 44, tx + (slot + 1) * tw + slot * 6, card.top + 72 };
         int act = (t == state->topbar_tab);
         row_surface(dc, tb, style, 4, act ? theme->accent : RGB(18, 22, 31), act ? theme->focus_border : theme->border);
         text(dc, font_small, tabs[t], tb, act ? RGB(255,255,255) : theme->muted, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        ++slot;
     }
 
     draw_modern_tab_rows(dc, card, card.top + 84, 42, 6, state, bindings, theme, cheat_states, cheat_enabled, ko_state);
@@ -1759,11 +1772,13 @@ static void draw_octagon_menu(HDC dc, RECT r, const MenuState *state, const Over
     RECT bn = { hub.left + 52, hub.top + 20, hub.right - 16, hub.top + 44 };
     text(dc, font_stat_label, L"PARSECTAGON", bn, theme->accent, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
-    for (int t = 0; t < TOPBAR_COUNT; ++t) {
-        RECT tb = { hub.left + 24, hub.top + 60 + t * 38, hub.right - 24, hub.top + 92 + t * 38 };
+    for (int t = 0, slot = 0; t < TOPBAR_COUNT; ++t) {
+        if (!UFC6_ENABLE_LOBBY && t == TOPBAR_LOBBY) continue;
+        RECT tb = { hub.left + 24, hub.top + 60 + slot * 38, hub.right - 24, hub.top + 92 + slot * 38 };
         int act = (t == state->topbar_tab);
         if (act) row_surface(dc, tb, 4, 8, theme->accent, theme->focus_border);
         text(dc, font_small, tabs[t], tb, act ? RGB(255,255,255) : theme->muted, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        ++slot;
     }
     controller_artwork_draw(dc, hub.left + 74, hub.bottom - 38, 26, 22, PAD_LB, ps);
     controller_artwork_draw(dc, hub.left + 128, hub.bottom - 38, 26, 22, PAD_RB, ps);
@@ -1805,13 +1820,15 @@ static void draw_topbar_menu(HDC dc, RECT r, const MenuState *state, const Overl
     RECT brand_sub = { bar.left + 44, bar.top + 20, bar.left + 190, bar.bottom - 6 };
     text(dc, font_small, L"UFC 6 OVERLAY", brand_sub, theme->text, DT_LEFT | DT_TOP | DT_SINGLELINE);
 
+    int visible_tabs = UFC6_ENABLE_LOBBY ? TOPBAR_COUNT : (TOPBAR_COUNT - 1);
     const wchar_t *tab_names[] = { L"Actions ▾", L"Lobby ▾", L"Cheats ▾", L"Photo ▾", L"Settings ▾" };
     int tab_start_x = bar.left + (is_island ? 202 : 210);
-    int tab_w = is_island ? 78 : 98;
+    int tab_w = is_island ? (UFC6_ENABLE_LOBBY ? 78 : 98) : (UFC6_ENABLE_LOBBY ? 98 : 122);
     controller_artwork_draw(dc, tab_start_x - 36, bar.top + 13, 30, 24, PAD_LB, ps);
 
-    for (int t = 0; t < TOPBAR_COUNT; ++t) {
-        RECT tab_box = { tab_start_x + t * (tab_w + 4), bar.top + 11, tab_start_x + (t + 1) * tab_w + t * 4, bar.bottom - 11 };
+    for (int t = 0, slot = 0; t < TOPBAR_COUNT; ++t) {
+        if (!UFC6_ENABLE_LOBBY && t == TOPBAR_LOBBY) continue;
+        RECT tab_box = { tab_start_x + slot * (tab_w + 4), bar.top + 11, tab_start_x + (slot + 1) * tab_w + slot * 4, bar.bottom - 11 };
         int active = (t == state->topbar_tab);
         if (active) {
             row_surface(dc, tab_box, style, style == 3 ? 14 : 5, theme->accent, theme->focus_border);
@@ -1819,9 +1836,10 @@ static void draw_topbar_menu(HDC dc, RECT r, const MenuState *state, const Overl
         } else {
             text(dc, font_small, tab_names[t], tab_box, theme->muted, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
         }
+        ++slot;
     }
 
-    int rb_x = tab_start_x + TOPBAR_COUNT * (tab_w + 4) + 6;
+    int rb_x = tab_start_x + visible_tabs * (tab_w + 4) + 6;
     controller_artwork_draw(dc, rb_x, bar.top + 13, 30, 24, PAD_RB, ps);
 
     wchar_t owner_label[64];
@@ -3308,7 +3326,7 @@ static DWORD WINAPI worker(void *unused) {
             if (!IsWindow(game_window)) break;
             if(!test_mode&&GetTickCount64()>=next_online_check){
                 next_online_check=GetTickCount64()+300;
-                EnterCriticalSection(&lock);int menu_is_open=menu.visible,replace_online=menu.replace_online_tab;LeaveCriticalSection(&lock);
+                EnterCriticalSection(&lock);int menu_is_open=menu.visible,replace_online=UFC6_ENABLE_LOBBY?menu.replace_online_tab:0;LeaveCriticalSection(&lock);
                 /* The in-frame panel obscures the native Online body but leaves the top tabs visible. */
                 int selected=menu_is_open||!replace_online?-1:online_tab_selected();
                 if(!replace_online)online_was_selected=0;

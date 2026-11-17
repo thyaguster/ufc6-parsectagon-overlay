@@ -1,4 +1,4 @@
-param([switch]$Test)
+param([switch]$Test,[switch]$NoLobby)
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 Set-Location -LiteralPath $root
@@ -21,6 +21,7 @@ python src/generate_lobby_poster.py --check
 if ($LASTEXITCODE) { throw 'Parsectagon poster artwork verification failed' }
 $sources = @('src/quit_menu.c','src/lobby_bridge.c','src/fight_report_export.c','src/avatar_readback.c','src/version_proxy.c','src/exact_hooks.c','src/restart_client.c','src/gamebar_shortcut.c','src/gamebar_monitor.c','src/launch_config.c','src/launcher_dialog.c','src/screenshot_folder.c','src/live_cheats.c','src/cheat_bindings.c','src/career_cheats.c','src/game_icons.c','src/game_version.c','src/save_backups.c','src/overlay_preferences.c','src/startup_options.c','src/startup_prompts.c','src/progression_notice.c','src/instant_replay_gate.c','src/photo_mode.c','src/replay_controls.c','src/audio_focus.c','src/audio_session_mute.c','src/performance_settings.c')
 $flags = @('cc','-target','x86_64-windows-gnu','-O2','-Wall','-Wextra','-Werror','-shared','-Isrc','-luser32','-lgdi32','-lkernel32','-ladvapi32','-lcomdlg32','-lwinhttp','-lshell32','-lole32','-luuid')
+if ($NoLobby) { $flags += '-DUFC6_ENABLE_LOBBY=0' }
 if ($Test) { $flags += '-DQUIT_MENU_TEST'; $output = 'dist/quit_menu_test.dll' }
 else { $output = 'dist/version.dll' }
 & $compiler @flags @sources 'src/version.def' '-o' $output
@@ -266,19 +267,22 @@ if ($Test) {
     if ($LASTEXITCODE) { throw 'New-engine Vulkan bootstrap smoke test failed' }
     New-Item -ItemType Directory -Force -Path '.build/controller-ci' | Out-Null
     Copy-Item -LiteralPath 'dist/quit_menu_test.dll' -Destination '.build/controller-ci/quit_menu_test.dll' -Force
-    python tests/icon_preview.py .build/controller-ci --lobby-live
-    if ($LASTEXITCODE) { throw 'Live lobby menu regression failed' }
-    python tests/icon_preview.py .build/controller-ci --lobby-staged
-    if ($LASTEXITCODE) { throw 'Staged lobby room regression failed' }
-    python tests/icon_preview.py .build/controller-ci --lobby-live --lobby-playstation
-    if ($LASTEXITCODE) { throw 'PlayStation lobby artwork regression failed' }
-    python tests/icon_preview.py .build/controller-ci --lobby-one-room
-    if ($LASTEXITCODE) { throw 'Single-room lobby menu regression failed' }
-    python tests/icon_preview.py .build/controller-ci --lobby-empty
-    if ($LASTEXITCODE) { throw 'Empty lobby menu regression failed' }
-    python tests/icon_preview.py .build/controller-ci --lobby-unavailable
-    if ($LASTEXITCODE) { throw 'Offline lobby menu regression failed' }
-    python tests/icon_preview.py .build/controller-ci --reset --new-ui
+    if (-not $NoLobby) {
+        python tests/icon_preview.py .build/controller-ci --lobby-live
+        if ($LASTEXITCODE) { throw 'Live lobby menu regression failed' }
+        python tests/icon_preview.py .build/controller-ci --lobby-staged
+        if ($LASTEXITCODE) { throw 'Staged lobby room regression failed' }
+        python tests/icon_preview.py .build/controller-ci --lobby-live --lobby-playstation
+        if ($LASTEXITCODE) { throw 'PlayStation lobby artwork regression failed' }
+        python tests/icon_preview.py .build/controller-ci --lobby-one-room
+        if ($LASTEXITCODE) { throw 'Single-room lobby menu regression failed' }
+        python tests/icon_preview.py .build/controller-ci --lobby-empty
+        if ($LASTEXITCODE) { throw 'Empty lobby menu regression failed' }
+        python tests/icon_preview.py .build/controller-ci --lobby-unavailable
+        if ($LASTEXITCODE) { throw 'Offline lobby menu regression failed' }
+    }
+    if ($NoLobby) { python tests/icon_preview.py .build/controller-ci --reset --new-ui --no-lobby }
+    else { python tests/icon_preview.py .build/controller-ci --reset --new-ui }
     if ($LASTEXITCODE) { throw 'New UI layout regression failed' }
     python tests/photo_ui_preview.py .build/controller-ci --reset
     if ($LASTEXITCODE) { throw 'Photo Mode UI regression failed' }

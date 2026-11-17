@@ -1,5 +1,7 @@
+param([switch]$NoLobby)
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath $PSScriptRoot
+& (Join-Path $PSScriptRoot 'build.ps1') -NoLobby:$NoLobby
 $version = (Get-Content -LiteralPath 'dist\release.json' -Raw | ConvertFrom-Json).version
 & (Join-Path $PSScriptRoot 'build-setup.ps1')
 $package = Join-Path $PSScriptRoot "release\UFC6-Actions-Overlay-$version"
