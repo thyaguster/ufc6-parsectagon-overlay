@@ -1,0 +1,211 @@
+// SPDX-License-Identifier: GPL-2.0-only
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
+
+namespace UFC6OverlaySetup {
+    public static class SelfTests {
+        static void Assert(bool condition,string message) { if (!condition) throw new Exception(message); }
+        static byte[] Bytes(string text) { return Encoding.UTF8.GetBytes(text); }
+        static void Word(byte[] data,int offset,ushort value){Array.Copy(BitConverter.GetBytes(value),0,data,offset,2);}
+        static void Dword(byte[] data,int offset,uint value){Array.Copy(BitConverter.GetBytes(value),0,data,offset,4);}
+        static void Pattern(byte[] data,int offset,byte[] value){Array.Copy(value,0,data,offset,value.Length);}
+        static byte[] CompatibleEngine(string kind){
+            var data=new byte[0x5000];data[0]=(byte)'M';data[1]=(byte)'Z';Dword(data,0x3c,0x80);Dword(data,0x80,0x4550);
+            Word(data,0x84,0x8664);Word(data,0x86,1);Word(data,0x94,0xf0);Word(data,0x98,0x20b);
+            bool fresh=kind=="new";Dword(data,0x88,fresh?0x6af93830u:0x6adf7fd0u);
+            Dword(data,0x98+56,fresh?0x3c26000u:kind=="parsec"?0x3c05000u:0x3c03000u);
+            Pattern(data,0x188,Bytes(".text"));Dword(data,0x188+8,0x4000);Dword(data,0x188+12,fresh?0x1000u:0x126e000u);
+            Dword(data,0x188+16,0x4000);Dword(data,0x188+20,0x400);Dword(data,0x188+36,0x60000020);
+            if(fresh){Pattern(data,0x1080,new byte[]{0x55,0x41,0x56,0x56,0x57,0x53,0x48,0x83,0xec,0x20,0x48,0x8d,0x6c,0x24,0x20});
+                Pattern(data,0x1400,new byte[]{0x55,0x41,0x57,0x41,0x56,0x56,0x57,0x53,0x48,0x81,0xec,0xc8,0,0,0});
+                Pattern(data,0x1590,new byte[]{0x55,0x41,0x57,0x41,0x56,0x41,0x55,0x41,0x54,0x56,0x57,0x53,0x48,0x81,0xec,0xc8,0,0,0});}
+            else if(kind=="parsec"){Pattern(data,0x1360,new byte[]{0xe9,0xb0,0x41,0x99,0x02});Pattern(data,0x1440,new byte[]{0xe9,0x56,0x40,0x99,0x02});Pattern(data,0x1670,new byte[]{0xe9,0x17,0x3e,0x99,0x02});}
+            else {Pattern(data,0x1360,new byte[]{0x55,0x56,0x57,0x48,0x83,0xec,0x30,0x48,0x8d,0x6c,0x24,0x30,0x48,0xc7,0x45,0xf8,0xfe,0xff,0xff,0xff});
+                Pattern(data,0x1440,new byte[]{0x55,0x41,0x56,0x56,0x57,0x53,0x48,0x81,0xec,0xd0,0,0,0,0x48,0x8d,0xac,0x24,0x80,0,0,0});
+                Pattern(data,0x1670,new byte[]{0x55,0x41,0x57,0x41,0x56,0x41,0x54,0x56,0x57,0x53,0x48,0x81,0xec,0xd0,0,0,0,0x48,0x8d,0xac,0x24,0x80,0,0,0});}
+            return data;
+        }
+        static void Reject(Action action,string message) { bool rejected = false; try { action(); } catch (IOException) { rejected = true; } catch (InvalidDataException) { rejected = true; } Assert(rejected,message); }
+        public static void Run(string report) {
+            string root = Path.Combine(Path.GetTempPath(),"UFC6 setup tests " + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            var passed = new List<string>();
+            try {
+                string folder = Path.Combine(root,"game with spaces","bin"); Directory.CreateDirectory(folder);
+                string engine = Path.Combine(folder,"UFC 6.exe"); File.WriteAllBytes(engine,Bytes("fixture engine"));
+                var payload = new Dictionary<string,byte[]> { {"ufc6_menu_layer.dll",Bytes("new layer")}, {"ufc6_menu_layer.json",Bytes("new manifest")}, {"ufc6_menu_restart.exe",Bytes("new helper")}, {"ufc6_menu_update.exe",Bytes("update helper fixture")}, {"version.dll",Bytes("new core")} };
+                var release = new Release { version = "fixture", engine_sha256 = Manager.HashFile(engine), dll_sha256 = Manager.Hash(payload["version.dll"]), previous_dll_sha256 = new [] {Manager.Hash(Bytes("old core"))}, companion_files = payload.Where(p => p.Key != "version.dll").ToDictionary(p => p.Key,p => Manager.Hash(p.Value)), previous_companion_sha256 = new Dictionary<string,string[]> { {"ufc6_menu_layer.dll",new [] {Manager.Hash(Bytes("old layer"))}} } };
+                var manager = new Manager(release,payload);
+                Assert(Manager.Normalize(Directory.GetParent(folder).FullName) == folder,"Game root must resolve to bin.");
+                Assert(manager.Inspect(folder).Supported,"Fixture engine must be supported.");
+                string parsec=Path.Combine(folder,"UFC 6 Parsec.exe");File.WriteAllBytes(parsec,Bytes("verified parsec fixture"));
+                release.parsec_engine_sha256=Manager.HashFile(parsec);manager=new Manager(release,payload);
+                Assert(manager.Inspect(folder).ParsecStatus.StartsWith("Verified"),"Parsec engine must be recognized in the same folder.");
+                passed.Add("PASS: one shared install recognizes both normal and verified Parsec engines; no separate payload or steps.");
+                foreach(string kind in new[]{"original","parsec","new"}){
+                    string file=Path.Combine(root,"compatible-"+kind+".exe");byte[] compatible=CompatibleEngine(kind);File.WriteAllBytes(file,compatible);
+                    string label=kind=="original"?"UFC 6.exe":kind=="parsec"?"UFC 6 Parsec.exe":"UFC 6 novo.exe";
+                    Assert(EngineCompatibility.Matches(file,label),"Unchanged controller routines must survive a changed file hash: "+kind);
+                    compatible[kind=="new"?0x1590:kind=="parsec"?0x1670:0x1440]=0;
+                    File.WriteAllBytes(file,compatible);
+                    Assert(!EngineCompatibility.Matches(file,label),"Changed controller callback must be rejected: "+kind);
+                }
+                passed.Add("PASS: compatible updated engine hashes are accepted by exact callback signatures; modified callbacks are rejected.");
+
+                string novo=Path.Combine(Directory.GetParent(folder).FullName,"novo");Directory.CreateDirectory(novo);
+                string newExe=Path.Combine(novo,"UFC 6 novo.exe");File.WriteAllBytes(newExe,Bytes("verified PS5 Pro engine"));
+                var newPayload=new Dictionary<string,byte[]> {{"winmm.dll",Bytes("new timing bridge")},{"ufc6_menu_layer.dll",Bytes("new layer")},{"ufc6_menu_layer.json",Bytes("new manifest")},{"ufc6_menu_restart.exe",Bytes("new helper")},{"version.dll",Bytes("new core")}};
+                var newRelease=new Release {version="fixture",engine_sha256=Manager.HashFile(newExe),dll_sha256=Manager.Hash(newPayload["version.dll"]),previous_dll_sha256=new[]{Manager.Hash(Bytes("probe core"))},companion_files=newPayload.Where(p=>p.Key!="version.dll").ToDictionary(p=>p.Key,p=>Manager.Hash(p.Value)),previous_companion_sha256=new Dictionary<string,string[]>{{"ufc6_menu_layer.dll",new[]{Manager.Hash(Bytes("probe layer"))}}}};
+                manager.NewEngine=new Manager(newRelease,newPayload,"UFC 6 novo.exe","PORTHEON PS5 Pro / DLSS");
+                Assert(Manager.Normalize(novo)==novo&&manager.Inspect(novo).Supported,"New engine folder must be selectable and recognized.");
+                string newSettings=Path.Combine(novo,"ufc6-quit-menu.ini");File.WriteAllText(newSettings,"[Menu]\nUIScale=125\n");
+                File.WriteAllBytes(Path.Combine(novo,"version.dll"),Bytes("probe core"));File.WriteAllBytes(Path.Combine(novo,"ufc6_menu_layer.dll"),Bytes("probe layer"));
+                for(int fail=0;fail<manager.NewEngine.Order.Count;++fail){int point=fail;manager.NewEngine.BeforeCommit=count=>{if(count==point)throw new IOException("Injected new-engine commit failure");};Reject(()=>manager.Apply(novo,false),"New-engine rollback must reject every commit failure");Assert(File.ReadAllText(Path.Combine(novo,"version.dll"))=="probe core"&&File.ReadAllText(Path.Combine(novo,"ufc6_menu_layer.dll"))=="probe layer","New-engine rollback must restore the probe files");}
+                manager.NewEngine.BeforeCommit=null;manager.Apply(novo,false);
+                Assert(manager.Inspect(novo).Current==manager.NewEngine.Order.Count&&File.ReadAllText(newSettings).Contains("UIScale=125"),"New-engine upgrade must install all files and keep settings.");
+                manager.Apply(novo,true);Assert(manager.Inspect(novo).Installed==0&&File.ReadAllText(newSettings).Contains("UIScale=125"),"New-engine removal must preserve settings.");
+                File.WriteAllBytes(Path.Combine(novo,"winmm.dll"),Bytes("foreign bridge"));Reject(()=>manager.Apply(novo,false),"Foreign timing bridge must be preserved");File.Delete(Path.Combine(novo,"winmm.dll"));
+                passed.Add("PASS: verified PS5 Pro / DLSS folder, reversible probe upgrade, every commit rollback, settings preservation, removal and foreign-bridge rejection.");
+
+                string ini = Path.Combine(folder,"ufc6-quit-menu.ini"), screenshot = Path.Combine(folder,"existing-screenshot.png");
+                File.WriteAllText(ini,"[Menu]\nUIScale=175\nAutoLaunchAfterRestart=0\nGuideButtonOpensMenu=0\n"); File.WriteAllBytes(screenshot,Bytes("existing image"));
+                string settings = File.ReadAllText(ini);
+                manager.Apply(folder,false); Assert(manager.Inspect(folder).Current == manager.Order.Count,"Installation must match every release hash.");
+                manager.Apply(folder,false); Assert(!Directory.GetFiles(folder,"*.bak").Any(),"Idempotent install must not create backups.");
+                manager.Apply(folder,true); Assert(manager.Inspect(folder).Installed == 0,"Remove must uninstall all managed files.");
+                Assert(File.ReadAllText(ini) == settings && File.ReadAllText(screenshot) == "existing image","User data must survive install and removal.");
+                passed.Add("PASS: root/bin selection, spaced paths, install/remove, idempotence, settings and screenshot preservation.");
+                File.WriteAllBytes(engine,Bytes("unsupported engine"));
+                Reject(() => manager.Apply(folder,false),"Unsupported engine must be rejected.");
+                Assert(!File.Exists(Path.Combine(folder,"version.dll")),"Unsupported engine must not install a core.");
+                File.WriteAllBytes(engine,Bytes("fixture engine"));
+                foreach (string name in manager.Order) {
+                    string target = Path.Combine(folder,name); File.WriteAllBytes(target,Bytes("unrelated mod"));
+                    Reject(() => manager.Apply(folder,false),"Unknown mod must block installation.");
+                    Reject(() => manager.Apply(folder,true),"Unknown mod must block removal.");
+                    Assert(File.ReadAllText(target) == "unrelated mod","Unknown mod must be preserved."); File.Delete(target);
+                }
+                passed.Add("PASS: unsupported engine and unknown files rejected before any change.");
+                string core = Path.Combine(folder,"version.dll"), layer = Path.Combine(folder,"ufc6_menu_layer.dll");
+                File.WriteAllBytes(core,Bytes("old core")); File.WriteAllBytes(layer,Bytes("old layer"));
+                for (int fail = 0; fail < manager.Order.Count; ++fail) {
+                    int point = fail;
+                    manager.BeforeCommit = count => { if (count == point) throw new IOException("Injected commit failure"); };
+                    Reject(() => manager.Apply(folder,false),"Injected failure must propagate.");
+                    Assert(File.ReadAllText(core) == "old core" && File.ReadAllText(layer) == "old layer","Rollback must restore recognized old versions.");
+                    Assert(!Directory.GetFiles(folder,"*.tmp").Any() && !Directory.GetFiles(folder,"*.bak").Any(),"Rollback must clean temporary files and restore backups.");
+                }
+                manager.BeforeCommit = null; manager.Apply(folder,false);
+                Assert(Directory.GetFiles(folder,"*.bak").Length == 2,"Upgrade must keep original core and layer backups.");
+                Assert(manager.Inspect(folder).Current == manager.Order.Count,"Upgrade must finish with all current binaries.");
+                passed.Add("PASS: every install commit failure rolls back; recognized upgrades keep backups; core commits last.");
+                for (int fail = 0; fail < manager.Order.Count; ++fail) {
+                    int point = fail;
+                    manager.BeforeCommit = count => { if (count == point) throw new IOException("Injected removal failure"); };
+                    Reject(() => manager.Apply(folder,true),"Removal failure must propagate.");
+                    Assert(manager.Inspect(folder).Current == manager.Order.Count,"Removal rollback must restore all installed files.");
+                }
+                manager.BeforeCommit = null; manager.Apply(folder,true);
+                passed.Add("PASS: every removal commit failure restores all installed files.");
+                manager.BeforeCommit = count => { if (count == 0) File.WriteAllBytes(layer,Bytes("concurrent mod")); };
+                Reject(() => manager.Apply(folder,false),"Concurrent file change must block replacement.");
+                Assert(File.ReadAllText(layer) == "concurrent mod" && !File.Exists(core),"Concurrent changes must not be overwritten.");
+                manager.BeforeCommit = null; File.Delete(layer);
+                Directory.CreateDirectory(layer); Reject(() => manager.Apply(folder,false),"Directory conflicts must be rejected."); Directory.Delete(layer);
+                var bad = new Dictionary<string,byte[]>(payload); bad["version.dll"] = Bytes("corrupt payload");
+                Reject(() => new Manager(release,bad),"Corrupt embedded payload must be rejected.");
+                Assert(File.ReadAllText(ini) == settings && File.ReadAllText(screenshot) == "existing image","All safeguards must preserve user data.");
+                passed.Add("PASS: concurrent writes, directory conflicts and corrupt bundled payloads are rejected.");
+                string runtime = Path.Combine(folder,"libwinpthread-1.dll"), originalCopy = Path.Combine(folder,"ufc6_pthread_original.dll");
+                byte[] original = Bytes("user supplied original threading runtime");
+                File.WriteAllBytes(runtime,original);
+                payload["libwinpthread-1.dll"] = Bytes("startup bridge fixture");
+                release.companion_files.Add("libwinpthread-1.dll",Manager.Hash(payload["libwinpthread-1.dll"]));
+                release.runtime_bridge = new RuntimeBridge { target = "libwinpthread-1.dll", original_name = "ufc6_pthread_original.dll", original_sha256 = Manager.Hash(original) };
+                var runtimeManager = new Manager(release,payload);
+                for (int fail = 0; fail < runtimeManager.Order.Count; ++fail) {
+                    int point = fail;
+                    runtimeManager.BeforeCommit = count => { if (count == point) throw new IOException("Injected bridge install failure"); };
+                    Reject(() => runtimeManager.Apply(folder,false),"Every bridge install failure must propagate.");
+                    Assert(File.ReadAllBytes(runtime).SequenceEqual(original) && !File.Exists(originalCopy),"Failed bridge installation must preserve the original runtime.");
+                    Assert(runtimeManager.Inspect(folder).Installed == 0,"Failed bridge installation must not leave a partial overlay.");
+                }
+                runtimeManager.BeforeCommit = null; runtimeManager.Apply(folder,false);
+                Assert(File.ReadAllBytes(originalCopy).SequenceEqual(original),"Original runtime must be preserved byte-for-byte.");
+                Assert(File.ReadAllBytes(runtime).SequenceEqual(payload["libwinpthread-1.dll"]),"Bridge must replace only the verified runtime.");
+                for (int fail = 0; fail < runtimeManager.Order.Count; ++fail) {
+                    int point = fail;
+                    runtimeManager.BeforeCommit = count => { if (count == point) throw new IOException("Injected bridge removal failure"); };
+                    Reject(() => runtimeManager.Apply(folder,true),"Bridge removal failure must propagate.");
+                    Assert(runtimeManager.Inspect(folder).Current == runtimeManager.Order.Count,"Bridge removal rollback must restore all files, including the user's runtime copy.");
+                }
+                runtimeManager.BeforeCommit = null;
+                File.Delete(originalCopy);
+                Reject(() => runtimeManager.Apply(folder,true),"Missing original must block removal safely.");
+                Reject(() => runtimeManager.Apply(folder,false),"Missing original must block reinstallation safely.");
+                File.WriteAllBytes(originalCopy,Bytes("another mod"));
+                Reject(() => runtimeManager.Apply(folder,true),"Unknown runtime copy must be preserved.");
+                File.WriteAllBytes(originalCopy,original);
+                runtimeManager.Apply(folder,true);
+                Assert(File.ReadAllBytes(runtime).SequenceEqual(original) && !File.Exists(originalCopy),"Uninstall must restore the original runtime and remove the extra copy.");
+                runtimeManager.Apply(folder,false); runtimeManager.Apply(folder,true);
+                Assert(File.ReadAllBytes(runtime).SequenceEqual(original),"Reinstall after uninstall must remain safe.");
+                Assert(File.ReadAllText(ini) == settings,"Runtime bridge migration must preserve settings.");
+                passed.Add("PASS: runtime bridge install/remove/reinstall, every commit rollback, missing/corrupt original rejection, and byte-for-byte runtime restoration.");
+                // A launcher rebuild has different bytes even when it uses our older sources.
+                var bundled = new Dictionary<string,byte[]> {
+                    {"version.dll",Bytes("PORTHEON rebuilt old core")},
+                    {"libwinpthread-1.dll",Bytes("PORTHEON rebuilt old bridge")},
+                    {"ufc6_menu_layer.dll",Bytes("PORTHEON rebuilt old layer")},
+                    {"ufc6_menu_restart.exe",Bytes("PORTHEON rebuilt old restart helper")}
+                };
+                release.previous_dll_sha256 = release.previous_dll_sha256.Concat(new [] {Manager.Hash(bundled["version.dll"])}).ToArray();
+                foreach(var item in bundled.Where(p => p.Key != "version.dll")) {
+                    string[] old;release.previous_companion_sha256.TryGetValue(item.Key,out old);
+                    release.previous_companion_sha256[item.Key]=(old??new string[0]).Concat(new [] {Manager.Hash(item.Value)}).ToArray();
+                }
+                runtimeManager=new Manager(release,payload);
+                File.WriteAllBytes(originalCopy,original);
+                foreach(var item in bundled)File.WriteAllBytes(Path.Combine(folder,item.Key),item.Value);
+                File.WriteAllBytes(Path.Combine(folder,"ufc6_menu_layer.json"),payload["ufc6_menu_layer.json"]);
+                Assert(runtimeManager.Inspect(folder).Conflicts.Count==0 && runtimeManager.Inspect(folder).RuntimeAvailable,"Verified launcher rebuild must be upgradable using the preserved original runtime.");
+                var beforeMigration=runtimeManager.Order.ToDictionary(n=>n,n=>File.Exists(Path.Combine(folder,n))?Manager.HashFile(Path.Combine(folder,n)):null);
+                for(int fail=0;fail<runtimeManager.Order.Count;++fail) {
+                    int point=fail;runtimeManager.BeforeCommit=count=>{if(count==point)throw new IOException("Injected bundled migration failure");};
+                    // Some files are already current: only actual commits can fail.
+                    int changes=runtimeManager.Order.Count(n=>beforeMigration[n] != (n==release.runtime_bridge.original_name?release.runtime_bridge.original_sha256:n=="version.dll"?release.dll_sha256:release.companion_files[n]));
+                    if(point>=changes)continue;
+                    Reject(()=>runtimeManager.Apply(folder,false),"Bundled migration failure must propagate.");
+                    Assert(beforeMigration.All(p=>(File.Exists(Path.Combine(folder,p.Key))?Manager.HashFile(Path.Combine(folder,p.Key)):null)==p.Value),"Bundled migration rollback must preserve every original file.");
+                }
+                runtimeManager.BeforeCommit=null;runtimeManager.Apply(folder,false);
+                Assert(runtimeManager.Inspect(folder).Current==runtimeManager.Order.Count,"Bundled migration must install the complete current payload.");
+                Assert(File.ReadAllText(ini)==settings,"Bundled migration must keep user preferences.");
+                runtimeManager.Apply(folder,true);
+                File.Delete(runtime);
+                Assert(!runtimeManager.Inspect(folder).RuntimeAvailable,"Check folder must detect a missing original runtime before installation.");
+                Assert(runtimeManager.Inspect(folder).Summary(runtimeManager).Contains("Original threading runtime is missing"),"Missing original diagnostic must be actionable.");
+                File.WriteAllBytes(runtime,original);
+                passed.Add("PASS: verified launcher rebuild migration, every migration rollback, complete startup bridge update, settings preservation and missing-runtime diagnostics.");
+                // Verify the actual embedded release too, without touching a game directory.
+                var embedded = new System.Web.Script.Serialization.JavaScriptSerializer().Deserialize<Release>(Encoding.UTF8.GetString(Program.Resource("release.json")).TrimStart('\ufeff'));
+                new Manager(embedded,embedded.companion_files.Keys.Concat(new [] {"version.dll"}).ToDictionary(n => n,n => Program.Resource(n)));
+                Assert(embedded.new_engine!=null,"Bundled release must describe the verified PS5 Pro engine.");
+                new Manager(embedded.new_engine,embedded.new_engine.companion_files.Keys.Concat(new [] {"version.dll"}).ToDictionary(n=>n,n=>Program.Resource(n)),"UFC 6 novo.exe","PORTHEON PS5 Pro / DLSS");
+                passed.Add("PASS: all actual bundled release files match the embedded manifest.");
+                var diagnosticHashes=new System.Web.Script.Serialization.JavaScriptSerializer().Deserialize<Dictionary<string,string>>(Encoding.UTF8.GetString(Program.Resource("diagnostics-components.json")).TrimStart('\ufeff'));
+                Assert(diagnosticHashes["version.dll"]==embedded.dll_sha256,"Diagnostic core fingerprint must match the shipped core.");
+                foreach(var item in embedded.companion_files.Where(p=>p.Key!="ufc6_menu_update.exe"))Assert(diagnosticHashes[item.Key]==item.Value,"Diagnostic companion fingerprint must match the shipped payload: "+item.Key);
+                passed.Add(DiagnosticsTests.Run());
+                File.WriteAllLines(report,passed);
+            } finally {
+                // Only this randomly created test directory is removed.
+                if (!Path.GetFullPath(root).StartsWith(Path.GetFullPath(Path.GetTempPath()),StringComparison.OrdinalIgnoreCase)) throw new IOException("Unsafe fixture path.");
+                Directory.Delete(root,true);
+            }
+        }
+    }
+}

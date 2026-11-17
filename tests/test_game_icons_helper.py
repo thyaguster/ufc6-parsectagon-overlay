@@ -1,0 +1,145 @@
+"""Handoff orchestration tests; fake processes and patch calls, no real game writes."""
+import configparser
+import importlib.util
+from pathlib import Path
+import sys
+import tempfile
+import types
+import unittest
+from unittest.mock import patch
+
+spec=importlib.util.spec_from_file_location('game_icons_helper',Path(__file__).resolve().parents[1]/'src/game_icons_helper.py')
+helper=importlib.util.module_from_spec(spec)
+spec.loader.exec_module(helper)
+
+
+class FakeProcesses:
+    def __init__(self,events,fail=None):self.events=events;self.fail=fail
+    def open(self,pid,path):
+        self.events.append(('open',pid))
+        if self.fail=='identity':raise helper.core.PatchError('wrong process')
+        return pid
+    def ready(self,name):self.events.append(('ready',name))
+    def wait(self,handle,timeout):
+        self.events.append(('wait',handle))
+        if self.fail=='timeout':raise helper.core.PatchError('still running')
+    def close(self,handle):self.events.append(('close',handle))
+
+
+class EnvironmentTests(unittest.TestCase):
+    def test_launcher_is_independent_of_deleted_helper_runtime(self):
+        inherited={'_PYI_APPLICATION_HOME_DIR':'missing runtime','_PYI_ARCHIVE_FILE':'icons.exe','_PYI_PARENT_PROCESS_LEVEL':'1','PYINSTALLER_RESET_ENVIRONMENT':'0','VK_INSTANCE_LAYERS':'overlay','CUSTOM_SETTING':'100% value'}
+        with patch.dict(helper.os.environ,inherited,clear=True),patch.object(helper.subprocess,'Popen') as start:
+            helper.launch_game({'launchexe':'C:/launcher.exe','launchargs':'--play --headless','workdir':'C:/game'})
+            env=start.call_args.kwargs['env']
+            self.assertEqual(env['PYINSTALLER_RESET_ENVIRONMENT'],'1')
+            self.assertFalse(any(k.startswith('_PYI_') for k in env))
+            self.assertEqual(env['VK_INSTANCE_LAYERS'],'overlay')
+            self.assertEqual(env['CUSTOM_SETTING'],'100% value')
+            self.assertEqual(helper.os.environ['_PYI_APPLICATION_HOME_DIR'],'missing runtime')
+
+
+class HandoffTests(unittest.TestCase):
+    def setUp(self):
+        self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
+        self.root=Path(self.temp.name);self.exe=self.root/'launcher with spaces.exe';self.exe.write_bytes(b'fixture')
+        self.job=self.root/'job.ini';self.report=self.root/'result.ini';self.events=[]
+        self.config=configparser.ConfigParser(interpolation=None)
+        self.config['Job']={'pid':'10','parent':'11','gameexe':str(self.root/'UFC 6.exe'),'launchexe':str(self.exe),'launchargs':'--play --headless --name "100% Player"','workdir':str(self.root),'gameroot':str(self.root),'report':str(self.report),'theme':'xbox','event':'Local\\UFC6GameIcons_test'}
+        self.write_job()
+    def write_job(self):
+        with self.job.open('w',encoding='utf-16') as f:self.config.write(f)
+    def run_job(self,fail=None,patch_fail=None):
+        def apply(theme,root,profile):
+            self.events.append(('patch',theme))
+            self.assertIn(('wait',11),self.events)
+            if patch_fail:raise helper.core.PatchError(patch_fail)
+            return 'verified'
+        def launch(job):
+            self.events.append(('launch',job['launchargs']))
+            self.assertEqual(job['launchexe'],str(self.exe))
+        with patch.object(helper.input_icons,'load_profile',return_value={'base':{}}),patch.object(helper.core,'validate_game',return_value=self.root):
+            helper.handoff(self.job,FakeProcesses(self.events,fail),apply,launch)
+    def test_waits_for_both_processes_then_patches_and_launches_once(self):
+        self.run_job()
+        self.assertLess(self.events.index(('wait',11)),self.events.index(('patch','xbox')))
+        self.assertEqual(sum(e[0]=='patch' for e in self.events),1)
+        self.assertEqual(sum(e[0]=='launch' for e in self.events),1)
+        ini=configparser.ConfigParser();ini.read(self.report,encoding='utf-16');self.assertEqual(ini['Icons']['State'],'2')
+        self.assertFalse(self.job.exists())
+    def test_startup_handoff_uses_separate_status_report(self):
+        self.config['Job']['theme']='startup_on';self.write_job();self.run_job()
+        self.assertLess(self.events.index(('wait',11)),self.events.index(('patch','startup_on')))
+        ini=configparser.ConfigParser();ini.read(self.report,encoding='utf-16')
+        self.assertEqual(ini['Startup']['State'],'2');self.assertNotIn('Icons',ini)
+    def test_keyboard_handoff_reports_distinct_installed_style(self):
+        self.config['Job']['theme']='keyboard';self.write_job();self.run_job()
+        ini=configparser.ConfigParser();ini.read(self.report,encoding='utf-16')
+        self.assertEqual(ini['Icons']['State'],'5')
+        self.assertIn(('patch','keyboard'),self.events)
+    def test_identity_failure_and_timeout_never_patch_or_relaunch(self):
+        for fail in ['identity','timeout']:
+            self.write_job();self.events.clear()
+            with self.assertRaises(helper.core.PatchError):self.run_job(fail)
+            self.assertFalse(any(e[0] in ('patch','launch') for e in self.events))
+    def test_verified_patch_rejection_keeps_report_and_relaunches_old_icons(self):
+        self.run_job(patch_fail='Unsupported version; nothing was written.')
+        self.assertTrue(any(e[0]=='launch' for e in self.events))
+        ini=configparser.ConfigParser();ini.read(self.report,encoding='utf-16');self.assertEqual(ini['Icons']['Success'],'0')
+    def test_incomplete_rollback_does_not_launch(self):
+        with self.assertRaises(helper.core.PatchError):self.run_job(patch_fail='Write failed and rollback was incomplete.')
+        self.assertFalse(any(e[0]=='launch' for e in self.events))
+    def test_invalid_theme_and_engine_filename_rejected(self):
+        for key,value in [('theme','other'),('gameexe',str(self.root/'unrelated.exe'))]:
+            before=self.config['Job'][key];self.config['Job'][key]=value;self.write_job()
+            with self.assertRaises(helper.core.PatchError):helper.load_job(self.job)
+            self.config['Job'][key]=before
+    def test_cancelled_job_never_applies(self):
+        original_wait=FakeProcesses.wait
+        def wait(processes,handle,timeout):
+            original_wait(processes,handle,timeout)
+            if handle==11:self.job.unlink()
+        with patch.object(FakeProcesses,'wait',wait),self.assertRaises(helper.core.PatchError):self.run_job()
+        self.assertFalse(any(e[0] in ('patch','launch') for e in self.events))
+
+
+class InputStyleTests(unittest.TestCase):
+    def test_status_distinguishes_keyboard_and_legacy_xbox(self):
+        with patch.object(helper.input_icons,'run',side_effect=[
+            'Current icons: keyboard. All 816 ranges verified.',
+            'Current icons: xbox / previous install. All 816 ranges verified.']):
+            self.assertEqual(helper.state(Path('unused'),{}),5)
+            self.assertEqual(helper.state(Path('unused'),{}),2)
+
+
+class FightReportStatusTests(unittest.TestCase):
+    def test_complete_report_runtime_modules_are_present(self):
+        scripts=Path(__file__).resolve().parents[1]/'scripts'
+        for name in ('decode_fight_stats_blob.py','export_complete_fight_report.py','read_postfight_capture.py'):
+            with self.subTest(name=name):
+                self.assertTrue((scripts/name).is_file())
+
+    def test_overall_only_report_is_saved_with_explicit_missing_round_status(self):
+        with tempfile.TemporaryDirectory() as directory:
+            report_file=Path(directory)/'report.ini'
+            exporter=types.ModuleType('export_complete_fight_report')
+            exporter.capture=lambda *_: {'fightStatisticsComplete':False}
+            exporter.save_report=lambda *args:Path(directory)/'saved-fight.json'
+            game=types.ModuleType('fight_report_export')
+            game.game_process=lambda: (123, 'test')
+            reader=types.ModuleType('read_postfight_capture')
+            reader.read_capture=lambda *_: (_ for _ in ()).throw(RuntimeError('No retained capture'))
+            reader.build_complete_report=lambda *_: None
+            with patch.dict(sys.modules,{'export_complete_fight_report':exporter,
+                                         'fight_report_export':game,
+                                         'read_postfight_capture':reader}), patch.object(
+                sys,'argv',['helper','--export-fight-report','--report',str(report_file)]):
+                exit_code=helper.main()
+                self.assertEqual(exit_code,0,report_file.read_text(encoding='utf-16'))
+            ini=configparser.ConfigParser();ini.read(report_file,encoding='utf-16')
+            self.assertEqual(ini['FightReport']['State'],'3')
+            self.assertEqual(ini['FightReport']['Success'],'1')
+            self.assertIn('round details unavailable',ini['FightReport']['Message'])
+
+
+if __name__=='__main__':unittest.main()
