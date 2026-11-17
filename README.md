@@ -27,23 +27,25 @@
 
 > **Lobby switch for public releases:** Public GitHub/release builds use `-NoLobby` (`UFC6_ENABLE_LOBBY=0`) to keep the Online Lobby tab and in-game Online tab takeover disabled for now.
 
+![UFC 6 Parsectagon Overlay running in-game](docs/screenshots/ingame/ingame-topbar-apex.jpg)
+
 ---
 
-## UI Types & Presets
+## UI Types & Presets (In-Game)
 
 Switch layouts or 1-click presets live inside the overlay under **Settings → Master preset** or **Appearance & theme → Layout style** (no config editing required):
 
-| Layout / Preset | Preview |
+| Layout / Preset | In-Game View |
 | :--- | :--- |
-| **Parsectagon Apex** (Top Bar + Glass) | ![Top Bar Apex](docs/screenshots/showcase/ui-topbar-apex.png) |
-| **Octagon Pill** (Floating Island + Pill) | ![Floating Island Pill](docs/screenshots/showcase/ui-island-pill.png) |
+| **Parsectagon Apex** (Top Bar + Glass) | ![Top Bar Apex In-Game](docs/screenshots/ingame/ingame-topbar-apex.jpg) |
+| **Octagon Pill** (Floating Island + Pill) | ![Floating Island Pill In-Game](docs/screenshots/ingame/ingame-island-pill.jpg) |
+| **Side Blade** (Left-Docked Console Rail) | ![Side Blade In-Game](docs/screenshots/ingame/ingame-sideblade.jpg) |
+| **Bottom Command Dock** (Bottom-Centered Dock) | ![Bottom Dock In-Game](docs/screenshots/ingame/ingame-bottomdock.jpg) |
+| **Bento Split Deck** (2-Column Dashboard) | ![Bento Deck In-Game](docs/screenshots/ingame/ingame-bento.jpg) |
+| **Broadcast Lower-Third** (Corner PPV Card) | ![Broadcast Card In-Game](docs/screenshots/ingame/ingame-broadcast.jpg) |
+| **Octagon Split Hub** (Octagon Badge + Panel) | ![Octagon Hub In-Game](docs/screenshots/ingame/ingame-octagon.jpg) |
 | **Championship Solid** (Top Bar + Opaque) | ![Top Bar Solid](docs/screenshots/showcase/ui-topbar-solid.png) |
 | **Stealth Island** (Floating Island + Glass) | ![Floating Island Glass](docs/screenshots/showcase/ui-island-glass.png) |
-| **Side Blade** (Left-Docked Console Rail) | ![Side Blade](docs/screenshots/showcase/ui-sideblade.png) |
-| **Bottom Command Dock** (Bottom-Centered Dock) | ![Bottom Dock](docs/screenshots/showcase/ui-bottomdock.png) |
-| **Bento Split Deck** (2-Column Dashboard) | ![Bento Deck](docs/screenshots/showcase/ui-bento.png) |
-| **Broadcast Lower-Third** (Corner PPV Card) | ![Broadcast Card](docs/screenshots/showcase/ui-broadcast.png) |
-| **Octagon Split Hub** (Octagon Badge + Panel) | ![Octagon Hub](docs/screenshots/showcase/ui-octagon.png) |
 
 ---
 
