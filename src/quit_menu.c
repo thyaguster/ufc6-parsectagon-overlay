@@ -108,6 +108,16 @@ static volatile LONG auto_report_saved;
 static volatile LONG auto_result_saved;
 static wchar_t auto_result_path[MAX_PATH];
 static ULONGLONG auto_report_finished_at,auto_report_retry_at,next_auto_state_poll;
+static FightReportSummary latest_report;
+static int test_fight_report_override;
+static void refresh_fight_report_summary(void){
+    if(test_fight_report_override)return;
+    FightReportSummary snap={0};
+    fight_report_read_latest(&snap);
+    if(snap.available&&(InterlockedCompareExchange(&fight_report_busy,0,0)||GetTickCount64()<auto_report_retry_at)&&snap.upload_state==REPORT_UPLOAD_SAVED_LOCAL)
+        snap.upload_state=REPORT_UPLOAD_WAITING;
+    EnterCriticalSection(&lock);latest_report=snap;LeaveCriticalSection(&lock);
+}
 static HFONT font_title, font_body, font_small, font_main, font_settings, font_stat_label, font_stat_value;
 static HFONT font_sets[3][5];static __thread int frame_font_index;
 static uint64_t toast_until;
@@ -1533,10 +1543,11 @@ static void draw_modern_tab_rows(HDC dc, RECT panel, int start_y, int item_h, in
         RECT control_rect = { row_rect.right - ctrl_w - 12, row_rect.top + 6, row_rect.right - 12, row_rect.bottom - 6 };
 
         if (state->topbar_tab == TOPBAR_ACTIONS) {
-            const wchar_t *act_items[] = { L"Resume game", L"Take screenshot", L"Restart game...", L"Quit game..." };
+            const wchar_t *act_items[] = { L"Resume game", L"Take screenshot", L"Restart game...", L"Quit game...", L"Post-fight report..." };
             text(dc, font_main, act_items[i], label_rect, focused ? RGB(255, 255, 255) : theme->text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
             if (i == 0) value_chip(dc, control_rect, L"Back to Octagon", focused, 0);
             else if (i == 1) value_chip(dc, control_rect, L"Save PNG", focused, 0);
+            else if (i == 4) value_chip(dc, control_rect, L"View", focused, 0);
             else value_chip(dc, control_rect, L"Confirm", focused, 0);
         } else if (state->topbar_tab == TOPBAR_LOBBY) {
             const wchar_t *lob_items[] = { L"Parsectagon Lobby Home", L"Browse fight rooms", L"Parsec Stream Quality Presets", L"Host a fight room" };
@@ -1886,12 +1897,13 @@ static void draw_topbar_menu(HDC dc, RECT r, const MenuState *state, const Overl
         RECT control_rect = { row_rect.right - 170, row_rect.top + 6, row_rect.right - 14, row_rect.bottom - 6 };
 
         if (state->topbar_tab == TOPBAR_ACTIONS) {
-            const wchar_t *act_items[] = { L"Resume game", L"Take screenshot", L"Restart game...", L"Quit game..." };
+            const wchar_t *act_items[] = { L"Resume game", L"Take screenshot", L"Restart game...", L"Quit game...", L"Post-fight report..." };
             text(dc, font_main, act_items[i], label_rect, focused ? RGB(255, 255, 255) : theme->text, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
             if (i == 0) value_chip(dc, control_rect, L"Back to Octagon", focused, 0);
             else if (i == 1) value_chip(dc, control_rect, L"Save PNG", focused, 0);
             else if (i == 2) value_chip(dc, control_rect, L"Confirm", focused, 0);
             else if (i == 3) value_chip(dc, control_rect, L"Confirm", focused, 0);
+            else if (i == 4) value_chip(dc, control_rect, L"View", focused, 0);
         } else if (state->topbar_tab == TOPBAR_LOBBY) {
             const wchar_t *lob_items[] = { L"Parsectagon Lobby Home", L"Browse fight rooms", L"Parsec Stream Quality Presets", L"Host a fight room" };
             text(dc, font_main, lob_items[i], label_rect, focused ? RGB(255, 255, 255) : theme->text, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
@@ -1959,15 +1971,94 @@ static void draw_topbar_menu(HDC dc, RECT r, const MenuState *state, const Overl
     }
 }
 
+static void draw_fight_report_page(HDC dc, RECT r, const MenuState *state, const OverlayPreferences *bindings, const OverlayTheme *theme, const FightReportSummary *rep, int conflict, const wchar_t *message) {
+    int ps = state->playstation_icons, style = bindings->box_style;
+    RECT panel = { 24, 16, r.right - 24, r.bottom - 16 };
+    row_surface(dc, panel, style, style == 3 ? 22 : 12, theme->surface, theme->border);
+
+    RECT eyebrow = { 50, 28, r.right - 260, 54 }, heading = { 50, 50, r.right - 260, 98 };
+    text(dc, font_stat_label, L"PARSECTAGON OVERLAY  /  POST-FIGHT REPORT", eyebrow, theme->accent, DT_LEFT | DT_SINGLELINE);
+    text(dc, font_title, L"Latest fight report", heading, theme->text, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+    const wchar_t *state_label = L"Saved locally";
+    COLORREF state_fill = RGB(24, 30, 42), state_border = theme->border, state_fg = theme->muted;
+    if (!rep->available) { state_label = L"No report"; }
+    else if (rep->upload_state == REPORT_UPLOAD_SUBMITTED) { state_label = L"Submitted"; state_fill = RGB(18, 46, 30); state_border = RGB(45, 130, 75); state_fg = RGB(120, 240, 160); }
+    else if (rep->upload_state == REPORT_UPLOAD_WAITING) { state_label = L"Waiting to upload"; state_fill = RGB(20, 36, 62); state_border = RGB(60, 120, 210); state_fg = RGB(140, 195, 255); }
+    else if (rep->upload_state == REPORT_UPLOAD_NEEDS_REVIEW) { state_label = L"Needs review"; state_fill = RGB(56, 26, 26); state_border = RGB(185, 70, 70); state_fg = RGB(255, 145, 145); }
+    RECT badge = { r.right - 242, 46, r.right - 48, 82 };
+    row_surface(dc, badge, style, style == 3 ? 14 : 6, state_fill, state_border);
+    text(dc, font_small, state_label, badge, state_fg, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+    const wchar_t *meta_titles[] = { L"WINNER", L"METHOD", L"ROUND", L"CAPTURED" };
+    wchar_t round_buf[48], meta_vals[4][64];
+    lstrcpynW(meta_vals[0], rep->available ? rep->winner : L"None", 64);
+    lstrcpynW(meta_vals[1], rep->available ? rep->method : L"—", 64);
+    if (rep->available && rep->round > 0) swprintf(round_buf, 48, L"R%d (%d:%02d)", rep->round, rep->clock_seconds / 60, rep->clock_seconds % 60);
+    else wcscpy(round_buf, L"—");
+    lstrcpynW(meta_vals[2], round_buf, 64);
+    lstrcpynW(meta_vals[3], rep->available ? rep->capture_time : L"—", 64);
+
+    int card_w = (r.right - 96 - 24) / 4;
+    for (int c = 0; c < 4; ++c) {
+        int x0 = 48 + c * (card_w + 8);
+        RECT box = { x0, 102, x0 + card_w, 164 };
+        row_surface(dc, box, style, style == 3 ? 12 : 6, RGB(15, 20, 28), theme->border);
+        RECT t = { box.left + 12, box.top + 6, box.right - 12, box.top + 30 };
+        RECT v = { box.left + 12, box.top + 30, box.right - 12, box.bottom - 6 };
+        text(dc, font_small, meta_titles[c], t, theme->muted, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        text(dc, font_small, meta_vals[c], v, theme->text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    }
+
+    RECT stats_box = { 48, 174, r.right - 48, 320 };
+    row_surface(dc, stats_box, style, style == 3 ? 14 : 8, RGB(15, 20, 28), theme->border);
+    RECT stats_hdr = { stats_box.left + 16, stats_box.top + 8, stats_box.right - 16, stats_box.top + 34 };
+    if (!rep->available) {
+        text(dc, font_stat_label, L"FIGHT STATS", stats_hdr, theme->accent, DT_LEFT | DT_SINGLELINE);
+        RECT empty = { stats_box.left + 16, stats_box.top + 42, stats_box.right - 16, stats_box.bottom - 14 };
+        text(dc, font_main, L"Finish a fight or choose Capture fight report now to record results.", empty, theme->muted, DT_LEFT | DT_WORDBREAK);
+    } else if (rep->has_stats) {
+        text(dc, font_stat_label, L"AVAILABLE FIGHT STATS  (RED  vs  BLUE)", stats_hdr, theme->accent, DT_LEFT | DT_SINGLELINE);
+        wchar_t lines[3][128];
+        swprintf(lines[0], 128, L"Knockdowns: %d vs %d   |   Stuns: %d vs %d", rep->red_kd, rep->blue_kd, rep->red_stuns, rep->blue_stuns);
+        swprintf(lines[1], 128, L"Sig. Strikes: %d/%d vs %d/%d   |   Total: %d/%d vs %d/%d", rep->red_sig_l, rep->red_sig_a, rep->blue_sig_l, rep->blue_sig_a, rep->red_tot_l, rep->red_tot_a, rep->blue_tot_l, rep->blue_tot_a);
+        swprintf(lines[2], 128, L"Takedowns: %d/%d vs %d/%d   |   Control: %ds vs %ds", rep->red_td_l, rep->red_td_a, rep->blue_td_l, rep->blue_td_a, rep->red_ctrl, rep->blue_ctrl);
+        for (int s = 0; s < 3; ++s) {
+            RECT lr = { stats_box.left + 16, stats_box.top + 38 + s * 32, stats_box.right - 16, stats_box.top + 68 + s * 32 };
+            text(dc, font_small, lines[s], lr, theme->text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        }
+    } else {
+        text(dc, font_stat_label, L"RESULT SUMMARY", stats_hdr, theme->accent, DT_LEFT | DT_SINGLELINE);
+        RECT note = { stats_box.left + 16, stats_box.top + 38, stats_box.right - 16, stats_box.top + 76 };
+        text(dc, font_small, rep->upload_error[0] ? rep->upload_error : L"Result saved. Full fight statistics were not captured for this report.", note, rep->upload_state == REPORT_UPLOAD_NEEDS_REVIEW ? RGB(255, 165, 120) : theme->muted, DT_LEFT | DT_VCENTER | DT_WORDBREAK);
+    }
+
+    const wchar_t *retry_label = rep->upload_state == REPORT_UPLOAD_NEEDS_REVIEW ? L"Retry failed upload" : rep->upload_state == REPORT_UPLOAD_SUBMITTED ? L"Re-upload report" : L"Upload report";
+    const wchar_t *actions[] = { retry_label, L"Capture fight report now", L"Refresh status", L"Back" };
+    const wchar_t *chips[] = { rep->upload_state == REPORT_UPLOAD_NEEDS_REVIEW ? L"Retry" : L"Send", L"Capture", L"Reload", L"Return" };
+    for (int i = 0; i < 4; ++i) {
+        int top = 332 + i * 50, focused = (i == state->selection);
+        RECT row = { 48, top, r.right - 48, top + 42 };
+        row_surface(dc, row, style, style == 3 ? 18 : 7, focused ? theme->focus : RGB(15, 20, 28), focused ? theme->focus_border : theme->border);
+        if (focused) { RECT marker = { row.left + 1, top + 7, row.left + 4, top + 35 }; HBRUSH b = CreateSolidBrush(theme->accent); FillRect(dc, &marker, b); DeleteObject(b); }
+        RECT lb = { row.left + 18, top + 2, row.right - 180, top + 40 }, cb = { row.right - 166, top + 6, row.right - 14, top + 36 };
+        text(dc, font_main, actions[i], lb, focused ? RGB(255, 255, 255) : theme->text, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        value_chip(dc, cb, chips[i], focused, 0);
+    }
+
+    RECT foot = { 48, r.bottom - 58, r.right - 48, r.bottom - 24 };
+    draw_modern_footer(dc, foot, state, theme, style, ps, (message && message[0]) ? message : (rep->upload_error[0] ? rep->upload_error : (conflict ? L"Game Bar active" : L"")), 1);
+}
+
 static void draw_menu(HDC dc, RECT r) {
     EnterCriticalSection(&lock);paint_theme=current_theme;OverlayPreferences bindings=preferences;frame_font_index=(preferences.font_size-16)/2;LeaveCriticalSection(&lock);
     HBRUSH bg = CreateSolidBrush(paint_theme.background);
     FillRect(dc, &r, bg); DeleteObject(bg);
     SetBkMode(dc, TRANSPARENT);
-    CareerSnapshot career_state;MenuState state;int save_failed,conflict,owner_player=0,has_owner=0;int ko_state;int cheat_states[LIVE_COUNT],cheat_enabled[LIVE_COUNT];wchar_t message[120],filename[128];
+    CareerSnapshot career_state;MenuState state;FightReportSummary report_snapshot;int save_failed,conflict,owner_player=0,has_owner=0;int ko_state;int cheat_states[LIVE_COUNT],cheat_enabled[LIVE_COUNT];wchar_t message[120],filename[128];
     EnterCriticalSection(&lock);
     ko_state=ko_status;memcpy(cheat_states,live_status,sizeof(cheat_states));memcpy(cheat_enabled,live_enabled,sizeof(cheat_enabled));
-    career_state=career;state=menu;LobbySnapshot lobby=lobby_display;int lobby_total=lobby_view.room_count;save_failed=settings_save_failed;conflict=gamebar_conflict;
+    career_state=career;state=menu;report_snapshot=latest_report;LobbySnapshot lobby=lobby_display;int lobby_total=lobby_view.room_count;save_failed=settings_save_failed;conflict=gamebar_conflict;
     lstrcpynW(filename,last_screenshot_name,128);
     if(raw_navigation&&raw_owner>=0){has_owner=1;owner_player=raw_owner+1;}
     else if(menu_device>=0&&devices[menu_device].used){has_owner=1;owner_player=native_player(&devices[menu_device]);}
@@ -1975,6 +2066,7 @@ static void draw_menu(HDC dc, RECT r) {
     if(state.page==PAGE_LOBBY&&!message[0]&&fight_report_last_status[0])
         lstrcpynW(message,fight_report_last_status,120);
     LeaveCriticalSection(&lock);
+    if(state.page==PAGE_FIGHT_REPORT){draw_fight_report_page(dc,r,&state,&bindings,&paint_theme,&report_snapshot,conflict,message);return;}
     if(state.page==PAGE_LOBBY_HOME){draw_lobby_home(dc,r,&state,&lobby);return;}
     if(state.page==PAGE_STREAM_PRESETS){draw_stream_presets(dc,r,&state);return;}
     if(state.page==PAGE_HOST_FIGHT){draw_host_fight(dc,r,&state,&lobby);return;}
@@ -2770,6 +2862,11 @@ static LRESULT CALLBACK overlay_proc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
         int first=menu_first_row(&menu);
         for(int i=0;i<menu_rows(&menu);++i){
             if(menu_scroll_page(menu.page)&&(i<first||i>=first+menu_visible_rows(&menu)))continue;
+            if(menu.page==PAGE_FIGHT_REPORT){
+                int top=332+i*50;
+                if(y>=top&&y<top+42)selected=i;
+                continue;
+            }
             if(menu_modern_settings_page(&menu)||menu_modern_dialog_page(&menu)||menu_modern_welcome_page(&menu)){
                 int idx=i-first;
                 int top=menu_modern_welcome_page(&menu)?521:menu_modern_dialog_page(&menu)?304+idx*50:126+idx*48;
@@ -3513,6 +3610,30 @@ static DWORD WINAPI worker(void *unused) {
             else if(msg.wParam==MENU_AUDIO_FOCUS_CHANGED){save_settings();status(menu.mute_background?L"Background audio muting On.":L"Background audio muting Off.");}
             else if(msg.wParam==MENU_STARTUP_CHANGED){save_settings();EnterCriticalSection(&lock);if(menu.startup_popups){startup_probe_deadline=GetTickCount64()+300000;startup_probe_seen=0;}else startup_release_confirm();LeaveCriticalSection(&lock);status(L"Startup options saved. Online notice suppression updates immediately.");}
             else if(msg.wParam==MENU_ONLINE_NOTICES_CHANGED){save_settings();EnterCriticalSection(&lock);int enabled=menu.suppress_online_notices;LeaveCriticalSection(&lock);progression_notice_set(enabled);status(enabled?L"Offline post-fight notices suppressed.":L"Offline post-fight notices restored.");}
+            else if(msg.wParam==MENU_FIGHT_REPORT_OPEN||msg.wParam==MENU_FIGHT_REPORT_REFRESH){
+                refresh_fight_report_summary();
+                if(msg.wParam==MENU_FIGHT_REPORT_REFRESH)status(latest_report.available?L"Fight report status refreshed.":L"No saved fight reports found.");
+            }
+            else if(msg.wParam==MENU_FIGHT_REPORT_RETRY){
+                refresh_fight_report_summary();
+                EnterCriticalSection(&lock);FightReportSummary rep=latest_report;LeaveCriticalSection(&lock);
+                if(!rep.available){status(L"No saved fight report found to upload.");}
+#ifdef QUIT_MENU_TEST
+                else if(test_mode){
+                    EnterCriticalSection(&lock);latest_report.upload_state=REPORT_UPLOAD_WAITING;latest_report.upload_error[0]=0;LeaveCriticalSection(&lock);
+                    status(L"Retrying fight report upload...");
+                }
+#endif
+                else{
+                    wchar_t err_path[MAX_PATH],helper[LAUNCH_PATH+40];
+                    swprintf(err_path,MAX_PATH,L"%ls.upload-error.txt",rep.file_path);
+                    DeleteFileW(err_path);
+                    swprintf(helper,LAUNCH_PATH+40,L"%ls\\ufc6_menu_icons.exe",performance_bin);
+                    EnterCriticalSection(&lock);latest_report.upload_state=REPORT_UPLOAD_WAITING;latest_report.upload_error[0]=0;LeaveCriticalSection(&lock);
+                    launch_fight_report_upload(helper,rep.file_path);
+                    status(L"Retrying fight report upload...");
+                }
+            }
             else if(msg.wParam==MENU_FIGHT_EXPORT){
 #ifdef QUIT_MENU_TEST
                 if(test_mode)status(L"Test fight report action; no game data or files read.");
@@ -3618,6 +3739,7 @@ static DWORD WINAPI worker(void *unused) {
             InvalidateRect(overlay, NULL, FALSE);
         } else if(msg.message==WM_BINDING_ACTION){if(msg.wParam==BIND_PHOTO)photo_shortcut_entry_queued=0;run_binding((int)msg.wParam);
         } else if(msg.message==WM_FIGHT_REPORT_READY){
+            refresh_fight_report_summary();
             EnterCriticalSection(&lock);
             lstrcpynW(fight_report_last_status,fight_report_message,120);
             LeaveCriticalSection(&lock);
@@ -3741,4 +3863,15 @@ __declspec(dllexport) void MenuTestReplayRange(int extended,int failed){EnterCri
 
 #ifdef QUIT_MENU_TEST
 __declspec(dllexport) int MenuTestKoState(void){return ko_status;}
+__declspec(dllexport) int MenuTestFightReport(const wchar_t *folder){
+    EnterCriticalSection(&lock);
+    if(!folder){test_fight_report_override=0;memset(&latest_report,0,sizeof(latest_report));LeaveCriticalSection(&lock);return 0;}
+    test_fight_report_override=1;
+    FightReportSummary snap={0};
+    int ok=fight_report_read_from_folder(folder,&snap);
+    latest_report=snap;
+    int state=latest_report.upload_state;
+    LeaveCriticalSection(&lock);
+    return ok?state:-1;
+}
 #endif

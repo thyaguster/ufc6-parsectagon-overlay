@@ -17,7 +17,7 @@ enum {
     SHORTCUT_BUTTONS=0x0000fcfe
 };
 enum { OVERLAY_ICONS_XBOX, OVERLAY_ICONS_PLAYSTATION, OVERLAY_ICONS_KEYBOARD };
-enum { PAGE_MAIN, PAGE_SETTINGS, PAGE_RESTART, PAGE_SHUTDOWN, PAGE_REBOOT, PAGE_SCREENSHOT, PAGE_RESET, PAGE_CHEATS, PAGE_CAREER_ADD, PAGE_GAME_ICONS, PAGE_GAME_ICONS_CONFIRM, PAGE_BACKUPS, PAGE_KEYBINDS, PAGE_BINDING, PAGE_THEME, PAGE_QUIT, PAGE_SETTINGS_HOME, PAGE_APPEARANCE, PAGE_CONTROLS, PAGE_GAME_SETTINGS, PAGE_TOOLS, PAGE_PHOTO, PAGE_PHOTO_CONTROLS, PAGE_PHOTO_EFFECTS, PAGE_PHOTO_WATERMARK, PAGE_PERFORMANCE, PAGE_PERFORMANCE_RESTART, PAGE_PERFORMANCE_DISCARD, PAGE_STARTUP, PAGE_STARTUP_CONFIRM, PAGE_EXPERIMENTAL, PAGE_WELCOME, PAGE_AVATAR_REPAIR, PAGE_AVATAR_ALWAYS, PAGE_LOBBY, PAGE_LOBBY_ACCOUNT, PAGE_LOBBY_HOME, PAGE_STREAM_PRESETS, PAGE_HOST_FIGHT };
+enum { PAGE_MAIN, PAGE_SETTINGS, PAGE_RESTART, PAGE_SHUTDOWN, PAGE_REBOOT, PAGE_SCREENSHOT, PAGE_RESET, PAGE_CHEATS, PAGE_CAREER_ADD, PAGE_GAME_ICONS, PAGE_GAME_ICONS_CONFIRM, PAGE_BACKUPS, PAGE_KEYBINDS, PAGE_BINDING, PAGE_THEME, PAGE_QUIT, PAGE_SETTINGS_HOME, PAGE_APPEARANCE, PAGE_CONTROLS, PAGE_GAME_SETTINGS, PAGE_TOOLS, PAGE_PHOTO, PAGE_PHOTO_CONTROLS, PAGE_PHOTO_EFFECTS, PAGE_PHOTO_WATERMARK, PAGE_PERFORMANCE, PAGE_PERFORMANCE_RESTART, PAGE_PERFORMANCE_DISCARD, PAGE_STARTUP, PAGE_STARTUP_CONFIRM, PAGE_EXPERIMENTAL, PAGE_WELCOME, PAGE_AVATAR_REPAIR, PAGE_AVATAR_ALWAYS, PAGE_LOBBY, PAGE_LOBBY_ACCOUNT, PAGE_LOBBY_HOME, PAGE_STREAM_PRESETS, PAGE_HOST_FIGHT, PAGE_FIGHT_REPORT };
 enum { MAIN_RESUME, MAIN_SCREENSHOT, MAIN_RESTART, MAIN_CHEATS, MAIN_PHOTO, MAIN_LOBBY, MAIN_SETTINGS, MAIN_QUIT, MAIN_REBOOT, MAIN_SHUTDOWN, MAIN_COUNT };
 enum { SETTING_ICONS, SETTING_SHORTCUT, SETTING_SCALE, SETTING_AUTO_LAUNCH, SETTING_GUIDE, SETTING_GAMEBAR, SETTING_LAUNCHER, SETTING_ACCESS, SETTING_SCREENSHOTS, SETTING_RESET, SETTING_GAME_ICONS, SETTING_UPDATE, SETTING_DIAGNOSTICS, SETTING_KEYBINDS, SETTING_THEME, SETTING_BACK, SETTING_FONT, SETTING_BOX_STYLE, SETTING_WINDOW_SIZE, SETTING_STARTUP_POPUPS, SETTING_SKIP_SPLASHES, SETTING_SUPPRESS_ONLINE_NOTICES, SETTING_SCREENSHOT_UI, SETTING_STARTUP_PATCH, SETTING_AUDIO_FOCUS, SETTING_DECISION_REPLAY, SETTING_EXPERIMENTAL, SETTING_INSTANT_REPLAY, SETTING_AVATAR_REPAIR, SETTING_AVATAR_ALWAYS, SETTING_MASTER_PRESET, SETTING_LAYOUT_STYLE, SETTING_BACKDROP_STYLE, SETTING_REPLACE_ONLINE, SETTING_COUNT };
 enum { MENU_NONE, MENU_OPEN, MENU_RESUME, MENU_QUIT, MENU_CHANGED,
@@ -26,7 +26,7 @@ enum { MENU_NONE, MENU_OPEN, MENU_RESUME, MENU_QUIT, MENU_CHANGED,
 enum { TOPBAR_ACTIONS, TOPBAR_LOBBY, TOPBAR_CHEATS, TOPBAR_PHOTO, TOPBAR_SETTINGS, TOPBAR_COUNT };
 
 enum { MENU_LOBBY_FILTER_CHANGED=MENU_LOBBY_REFRESH+1, MENU_FIGHT_EXPORT, MENU_GAME_ICONS_EDIT, MENU_LOBBY_LINK, MENU_LOBBY_UNLINK, MENU_STREAM_PRESET_APPLY, MENU_HOST_ROOM_PUBLISH };
-enum { MENU_REPLACE_ONLINE_CHANGED=MENU_HOST_ROOM_PUBLISH+1 };
+enum { MENU_REPLACE_ONLINE_CHANGED=MENU_HOST_ROOM_PUBLISH+1, MENU_FIGHT_REPORT_OPEN, MENU_FIGHT_REPORT_RETRY, MENU_FIGHT_REPORT_REFRESH };
 
 typedef struct {
     int visible,selection,armed,chord_latched,draining;
@@ -109,7 +109,7 @@ static int topbar_next_tab(int current,int dir){
 }
 static int topbar_tab_rows(int tab){
     switch(tab){
-        case TOPBAR_ACTIONS: return 4;
+        case TOPBAR_ACTIONS: return 5;
         case TOPBAR_LOBBY: return 4;
         case TOPBAR_CHEATS: return 5;
         case TOPBAR_PHOTO: return 4;
@@ -193,17 +193,17 @@ static int next_visible_preset(int current,int backwards){
 static int menu_scroll_page(int page){return page==PAGE_LOBBY||page==PAGE_STARTUP||menu_setting_page(page)||page==PAGE_CHEATS||page==PAGE_KEYBINDS||page==PAGE_THEME||page==PAGE_PHOTO||page==PAGE_PHOTO_CONTROLS||page==PAGE_PHOTO_EFFECTS||page==PAGE_PHOTO_WATERMARK||page==PAGE_PERFORMANCE;}
 static int menu_rows(const MenuState *s) {
     if(s->page==PAGE_MAIN&&s->layout_style!=LAYOUT_CLASSIC)return topbar_tab_rows(s->topbar_tab);
-    return s->page==PAGE_LOBBY_HOME?8:s->page==PAGE_STREAM_PRESETS?5:s->page==PAGE_HOST_FIGHT?7:s->page==PAGE_LOBBY?8+s->lobby_room_count:s->page==PAGE_LOBBY_ACCOUNT?3:s->page==PAGE_WELCOME?1:s->page==PAGE_STARTUP?3:s->page==PAGE_STARTUP_CONFIRM||s->page==PAGE_AVATAR_REPAIR||s->page==PAGE_AVATAR_ALWAYS?2:s->page==PAGE_PERFORMANCE?PERF_ROWS:s->page==PAGE_PERFORMANCE_RESTART||s->page==PAGE_PERFORMANCE_DISCARD?2:s->page==PAGE_PHOTO_EFFECTS?FX_ROWS:s->page==PAGE_PHOTO_WATERMARK?MARK_ROWS:s->page==PAGE_PHOTO?12:s->page==PAGE_PHOTO_CONTROLS?12:s->page==PAGE_SETTINGS_HOME?7:s->page==PAGE_APPEARANCE?10:s->page==PAGE_CONTROLS?5:s->page==PAGE_GAME_SETTINGS?11:s->page==PAGE_TOOLS?6:s->page==PAGE_EXPERIMENTAL?5:s->page==PAGE_KEYBINDS?11:s->page==PAGE_BINDING?5:s->page==PAGE_THEME?7:s->page==PAGE_MAIN?MAIN_COUNT:s->page==PAGE_SETTINGS?SETTING_COUNT:s->page==PAGE_CHEATS?12:s->page==PAGE_BACKUPS?3:s->page==PAGE_GAME_ICONS?5:s->shutdown_countdown?1:2;
+    return s->page==PAGE_FIGHT_REPORT?4:s->page==PAGE_LOBBY_HOME?8:s->page==PAGE_STREAM_PRESETS?5:s->page==PAGE_HOST_FIGHT?7:s->page==PAGE_LOBBY?8+s->lobby_room_count:s->page==PAGE_LOBBY_ACCOUNT?3:s->page==PAGE_WELCOME?1:s->page==PAGE_STARTUP?3:s->page==PAGE_STARTUP_CONFIRM||s->page==PAGE_AVATAR_REPAIR||s->page==PAGE_AVATAR_ALWAYS?2:s->page==PAGE_PERFORMANCE?PERF_ROWS:s->page==PAGE_PERFORMANCE_RESTART||s->page==PAGE_PERFORMANCE_DISCARD?2:s->page==PAGE_PHOTO_EFFECTS?FX_ROWS:s->page==PAGE_PHOTO_WATERMARK?MARK_ROWS:s->page==PAGE_PHOTO?12:s->page==PAGE_PHOTO_CONTROLS?12:s->page==PAGE_SETTINGS_HOME?7:s->page==PAGE_APPEARANCE?10:s->page==PAGE_CONTROLS?5:s->page==PAGE_GAME_SETTINGS?11:s->page==PAGE_TOOLS?6:s->page==PAGE_EXPERIMENTAL?5:s->page==PAGE_KEYBINDS?11:s->page==PAGE_BINDING?5:s->page==PAGE_THEME?7:s->page==PAGE_MAIN?MAIN_COUNT:s->page==PAGE_SETTINGS?SETTING_COUNT:s->page==PAGE_CHEATS?12:s->page==PAGE_BACKUPS?3:s->page==PAGE_GAME_ICONS?5:s->shutdown_countdown?1:2;
 }
 static int lobby_grid_columns(const MenuState *s){return s->online_takeover&&s->lobby_columns>=3?s->lobby_columns:2;}
 static int lobby_columns_for_viewport(uint32_t width){return width>=2200?4:width>=1700?3:2;}
 static int lobby_visible_rooms(const MenuState *s){int limit=s->online_takeover&&lobby_grid_columns(s)==2?2:lobby_grid_columns(s)*2;return s->lobby_room_count<limit?s->lobby_room_count:limit;}
 static int lobby_cards_bottom(const MenuState *s){int rooms=lobby_visible_rooms(s),columns=lobby_grid_columns(s);if(s->online_takeover)return 328+226+214;if(!rooms)return 488;return 328+((rooms+columns-1)/columns-1)*226+214;}
-static int menu_visible_rows(const MenuState *s){int count=menu_rows(s);if(menu_modern_settings_page(s))return count<9?count:9;if(menu_modern_dialog_page(s))return count;int capacity=s->page==PAGE_LOBBY?8+lobby_visible_rooms(s):s->window_size==2?12:s->window_size==1?9:6;return count<capacity?count:capacity;}
+static int menu_visible_rows(const MenuState *s){int count=menu_rows(s);if(s->page==PAGE_FIGHT_REPORT||menu_modern_settings_page(s))return count<9?count:9;if(menu_modern_dialog_page(s))return count;int capacity=s->page==PAGE_LOBBY?8+lobby_visible_rooms(s):s->window_size==2?12:s->window_size==1?9:6;return count<capacity?count:capacity;}
 static inline uint32_t menu_canvas_width(const MenuState *s){
     if(s->page==PAGE_LOBBY_HOME||s->page==PAGE_STREAM_PRESETS||s->page==PAGE_HOST_FIGHT)return 1760u;
     if(s->page==PAGE_LOBBY)return (lobby_grid_columns(s)==4?1760u:lobby_grid_columns(s)==3?1200u:840u);
-    if(menu_modern_settings_page(s)||menu_modern_dialog_page(s)||menu_modern_welcome_page(s))return 900u;
+    if(s->page==PAGE_FIGHT_REPORT||menu_modern_settings_page(s)||menu_modern_dialog_page(s)||menu_modern_welcome_page(s))return 900u;
     if(s->page==PAGE_MAIN&&s->layout_style==LAYOUT_TOPBAR)return 1280u;
     if(s->page==PAGE_MAIN&&s->layout_style==LAYOUT_ISLAND)return 880u;
     if(s->page==PAGE_MAIN&&s->layout_style==LAYOUT_SIDEBLADE)return 620u;
@@ -216,6 +216,7 @@ static inline uint32_t menu_canvas_width(const MenuState *s){
 static uint32_t menu_canvas_height(const MenuState *s){
     if(s->page==PAGE_LOBBY_HOME||s->page==PAGE_STREAM_PRESETS||s->page==PAGE_HOST_FIGHT)return 918u;
     if(s->page==PAGE_LOBBY){uint32_t height=(uint32_t)lobby_cards_bottom(s)+150u;return height<555u?555u:height;}
+    if(s->page==PAGE_FIGHT_REPORT)return 610u;
     if(menu_modern_settings_page(s))return 196u+(uint32_t)menu_visible_rows(s)*48u;
     if(menu_modern_dialog_page(s))return 510u;
     if(menu_modern_welcome_page(s))return 660u;
@@ -336,6 +337,7 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
         if(s->page==PAGE_SETTINGS_HOME){if(s->online_takeover){s->page=PAGE_LOBBY_HOME;s->selection=6;s->armed=0;return MENU_CHANGED;}s->page=PAGE_MAIN;s->selection=MAIN_SETTINGS;if(s->layout_style!=LAYOUT_CLASSIC){s->topbar_tab=TOPBAR_SETTINGS;s->selection=0;}s->armed=0;return MENU_CHANGED;}
         if(s->page==PAGE_BINDING){s->page=PAGE_KEYBINDS;s->selection=s->binding_action;s->armed=0;return MENU_CHANGED;}
         if(s->page==PAGE_KEYBINDS||s->page==PAGE_THEME){int id=s->page==PAGE_KEYBINDS?SETTING_KEYBINDS:SETTING_THEME;menu_return_setting(s,id);return MENU_CHANGED;}
+        if(s->page==PAGE_FIGHT_REPORT){s->page=PAGE_MAIN;if(s->layout_style!=LAYOUT_CLASSIC){s->topbar_tab=TOPBAR_ACTIONS;s->selection=4;}else s->selection=MAIN_RESUME;s->armed=0;return MENU_CHANGED;}
         if(s->page==PAGE_QUIT){s->page=PAGE_MAIN;s->selection=MAIN_QUIT;if(s->layout_style!=LAYOUT_CLASSIC){s->topbar_tab=TOPBAR_ACTIONS;s->selection=3;}s->armed=0;return MENU_CHANGED;}
         if(s->page==PAGE_BACKUPS){s->page=PAGE_CHEATS;s->selection=10;s->armed=0;return MENU_CHANGED;}
         if(s->page==PAGE_GAME_ICONS_CONFIRM){int from_overlay=s->game_icons_from_overlay_change;s->page=from_overlay?s->game_icons_return_page:PAGE_GAME_ICONS;s->selection=from_overlay?s->game_icons_return_selection:s->game_icons_style;s->game_icons_from_overlay_change=0;s->armed=0;return MENU_CHANGED;}
@@ -723,6 +725,12 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
         if(s->selection==1)return menu_close(s,MENU_RESTART);
         s->page=PAGE_MAIN;s->selection=MAIN_RESTART;s->armed=0;return MENU_CHANGED;
     }
+    if(s->page==PAGE_FIGHT_REPORT){
+        if(s->selection==0)return MENU_FIGHT_REPORT_RETRY;
+        if(s->selection==1)return MENU_FIGHT_EXPORT;
+        if(s->selection==2)return MENU_FIGHT_REPORT_REFRESH;
+        s->page=PAGE_MAIN;if(s->layout_style!=LAYOUT_CLASSIC){s->topbar_tab=TOPBAR_ACTIONS;s->selection=4;}else s->selection=MAIN_RESUME;s->armed=0;return MENU_CHANGED;
+    }
     if(s->page==PAGE_MAIN&&s->layout_style!=LAYOUT_CLASSIC){
         switch(s->topbar_tab){
             case TOPBAR_ACTIONS:
@@ -730,6 +738,7 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
                 if(s->selection==1)return MENU_SCREENSHOT;
                 if(s->selection==2){s->page=PAGE_RESTART;s->selection=0;s->armed=0;return MENU_CHANGED;}
                 if(s->selection==3){s->page=PAGE_QUIT;s->selection=0;s->armed=0;return MENU_CHANGED;}
+                if(s->selection==4){s->page=PAGE_FIGHT_REPORT;s->selection=0;s->armed=0;return MENU_FIGHT_REPORT_OPEN;}
                 break;
             case TOPBAR_LOBBY:
                 if(s->selection==0){menu_open_lobby(s,1,0);return MENU_CHANGED;}

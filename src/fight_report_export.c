@@ -281,3 +281,169 @@ int fight_report_export_result(const wchar_t *game_version,int new_engine,
     if(error&&error_count)error[0]=0;
     return 1;
 }
+
+static int json_find_int(const char *src,const char *key,int *value){
+    if(!src||!key||!value)return 0;
+    const char *p=strstr(src,key);
+    if(!p)return 0;
+    p+=strlen(key);
+    while(*p==' '||*p=='\t'||*p==':')++p;
+    if(*p!='-'&&(*p<'0'||*p>'9'))return 0;
+    *value=(int)strtol(p,NULL,10);
+    return 1;
+}
+static int json_find_ull(const char *src,const char *key,unsigned long long *value){
+    if(!src||!key||!value)return 0;
+    const char *p=strstr(src,key);
+    if(!p)return 0;
+    p+=strlen(key);
+    while(*p==' '||*p=='\t'||*p==':')++p;
+    if(*p<'0'||*p>'9')return 0;
+    *value=strtoull(p,NULL,10);
+    return 1;
+}
+static int json_find_str(const char *src,const char *key,char *out,size_t count){
+    if(!src||!key||!out||!count)return 0;
+    out[0]=0;
+    const char *p=strstr(src,key);
+    if(!p)return 0;
+    p+=strlen(key);
+    while(*p==' '||*p=='\t'||*p==':')++p;
+    if(*p!='"')return 0;
+    ++p;
+    size_t i=0;
+    while(*p&&*p!='"'&&i+1<count){
+        if(*p=='\\'&&p[1]){++p;}
+        out[i++]=*p++;
+    }
+    out[i]=0;
+    return i>0;
+}
+static void parse_fighter_stats(const char *stats,int *kd,int *stuns,int *sig_a,int *sig_l,int *tot_a,int *tot_l,int *td_a,int *td_l,int *ctrl){
+    json_find_int(stats,"\"knockdowns\"",kd);
+    json_find_int(stats,"\"stuns\"",stuns);
+    json_find_int(stats,"\"significantStrikesAttempted\"",sig_a);
+    json_find_int(stats,"\"significantStrikesLanded\"",sig_l);
+    json_find_int(stats,"\"totalStrikesAttempted\"",tot_a);
+    json_find_int(stats,"\"totalStrikesLanded\"",tot_l);
+    json_find_int(stats,"\"takedownsAttempted\"",td_a);
+    json_find_int(stats,"\"takedownsLanded\"",td_l);
+    json_find_int(stats,"\"controlTimeSeconds\"",ctrl);
+}
+static int read_small_utf8(const wchar_t *path,char *buf,size_t cap){
+    HANDLE f=CreateFileW(path,GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
+    if(f==INVALID_HANDLE_VALUE)return 0;
+    DWORD got=0;BOOL ok=ReadFile(f,buf,(DWORD)(cap-1),&got,NULL);
+    CloseHandle(f);
+    if(!ok)return 0;
+    buf[got]=0;
+    return 1;
+}
+static void format_capture_time(unsigned long long ms,const FILETIME *fallback,wchar_t *out,size_t count){
+    FILETIME ft={0},local_ft={0};SYSTEMTIME st={0};
+    if(ms>0){
+        ULARGE_INTEGER ui;
+        ui.QuadPart=ms*10000ULL+116444736000000000ULL;
+        ft.dwLowDateTime=ui.LowPart;ft.dwHighDateTime=ui.HighPart;
+    }else if(fallback){
+        ft=*fallback;
+    }
+    if((ft.dwLowDateTime||ft.dwHighDateTime)&&FileTimeToLocalFileTime(&ft,&local_ft)&&FileTimeToSystemTime(&local_ft,&st)){
+        swprintf(out,count,L"%04u-%02u-%02u %02u:%02u:%02u",st.wYear,st.wMonth,st.wDay,st.wHour,st.wMinute,st.wSecond);
+    }else lstrcpynW(out,L"Unknown",(int)count);
+}
+int fight_report_read_from_folder(const wchar_t *folder,FightReportSummary *out){
+    if(!out)return 0;
+    memset(out,0,sizeof(*out));
+    lstrcpyW(out->winner,L"No report captured");
+    lstrcpyW(out->method,L"—");
+    lstrcpyW(out->capture_time,L"—");
+    if(!folder||!folder[0])return 0;
+
+    wchar_t pattern[MAX_PATH];
+    if(swprintf(pattern,MAX_PATH,L"%ls\\*.json",folder)<=0)return 0;
+    WIN32_FIND_DATAW fd;
+    HANDLE h=FindFirstFileW(pattern,&fd);
+    if(h==INVALID_HANDLE_VALUE)return 0;
+
+    wchar_t best_name[MAX_PATH]=L"";
+    FILETIME best_time={0};
+    do{
+        if(fd.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY)continue;
+        size_t len=wcslen(fd.cFileName);
+        if(len>12&&_wcsicmp(fd.cFileName+len-12,L".upload.json")==0)continue;
+        if(!best_name[0]||CompareFileTime(&fd.ftLastWriteTime,&best_time)>0){
+            lstrcpynW(best_name,fd.cFileName,MAX_PATH);
+            best_time=fd.ftLastWriteTime;
+        }
+    }while(FindNextFileW(h,&fd));
+    FindClose(h);
+    if(!best_name[0])return 0;
+
+    if(swprintf(out->file_path,260,L"%ls\\%ls",folder,best_name)<=0)return 0;
+    char json[8192];
+    if(!read_small_utf8(out->file_path,json,sizeof(json)))return 0;
+    out->available=1;
+
+    char corner[32]="",method[48]="";
+    json_find_str(json,"\"winnerCorner\"",corner,sizeof(corner));
+    if(_stricmp(corner,"red")==0)lstrcpyW(out->winner,L"Red corner");
+    else if(_stricmp(corner,"blue")==0)lstrcpyW(out->winner,L"Blue corner");
+    else lstrcpyW(out->winner,L"Unknown");
+
+    if(json_find_str(json,"\"method\"",method,sizeof(method)))MultiByteToWideChar(CP_UTF8,0,method,-1,out->method,48);
+    else lstrcpyW(out->method,L"Unknown");
+
+    json_find_int(json,"\"round\"",&out->round);
+    json_find_int(json,"\"clockSeconds\"",&out->clock_seconds);
+
+    unsigned long long captured_ms=0;
+    json_find_ull(json,"\"capturedAt\"",&captured_ms);
+    format_capture_time(captured_ms,&best_time,out->capture_time,48);
+
+    const char *red_p=strstr(json,"\"corner\":\"red\"");
+    const char *blue_p=strstr(json,"\"corner\":\"blue\"");
+    const char *red_stats=red_p?strstr(red_p,"\"stats\""):NULL;
+    const char *blue_stats=blue_p?strstr(blue_p,"\"stats\""):NULL;
+    if(red_stats&&blue_stats&&(!blue_p||red_stats<blue_p)){
+        out->has_stats=1;
+        parse_fighter_stats(red_stats,&out->red_kd,&out->red_stuns,&out->red_sig_a,&out->red_sig_l,&out->red_tot_a,&out->red_tot_l,&out->red_td_a,&out->red_td_l,&out->red_ctrl);
+        parse_fighter_stats(blue_stats,&out->blue_kd,&out->blue_stuns,&out->blue_sig_a,&out->blue_sig_l,&out->blue_tot_a,&out->blue_tot_l,&out->blue_td_a,&out->blue_td_l,&out->blue_ctrl);
+    }
+
+    wchar_t marker[MAX_PATH],err_path[MAX_PATH];
+    swprintf(marker,MAX_PATH,L"%ls.upload.json",out->file_path);
+    swprintf(err_path,MAX_PATH,L"%ls.upload-error.txt",out->file_path);
+    char marker_buf[1024],err_buf[512];
+    if(read_small_utf8(marker,marker_buf,sizeof(marker_buf))){
+        char status_str[32]="";
+        json_find_str(marker_buf,"\"status\"",status_str,sizeof(status_str));
+        if(_stricmp(status_str,"needs_review")==0||strstr(marker_buf,"\"needsReview\":true")||strstr(marker_buf,"\"needsReview\": true")){
+            out->upload_state=REPORT_UPLOAD_NEEDS_REVIEW;
+            lstrcpyW(out->upload_error,L"Flagged for review by server.");
+        }else if(_stricmp(status_str,"uploaded")==0){
+            out->upload_state=REPORT_UPLOAD_SUBMITTED;
+        }else{
+            out->upload_state=REPORT_UPLOAD_WAITING;
+        }
+    }else if(read_small_utf8(err_path,err_buf,sizeof(err_buf))){
+        out->upload_state=REPORT_UPLOAD_NEEDS_REVIEW;
+        size_t elen=strlen(err_buf);
+        while(elen>0&&(err_buf[elen-1]=='\r'||err_buf[elen-1]=='\n'))err_buf[--elen]=0;
+        MultiByteToWideChar(CP_UTF8,0,err_buf,-1,out->upload_error,160);
+    }else{
+        out->upload_state=REPORT_UPLOAD_SAVED_LOCAL;
+    }
+    return 1;
+}
+int fight_report_read_latest(FightReportSummary *out){
+    if(!out)return 0;
+    memset(out,0,sizeof(*out));
+    PWSTR documents=NULL;
+    if(FAILED(SHGetKnownFolderPath(&documents_id,0,NULL,&documents))||!documents)return 0;
+    wchar_t folder[MAX_PATH];
+    int ok=swprintf(folder,MAX_PATH,L"%ls\\Parsectagon\\Fight Reports",documents)>0;
+    CoTaskMemFree(documents);
+    if(!ok)return 0;
+    return fight_report_read_from_folder(folder,out);
+}

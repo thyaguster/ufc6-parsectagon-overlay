@@ -44,7 +44,7 @@ dll.MenuTestSnapshot.restype = c.c_int
 dll.MenuTestTextClips.argtypes = [c.c_int]
 dll.MenuTestTextClips.restype = c.c_int
 
-RESOLUTIONS = [(1280, 720), (1920, 1080), (2560, 1440)]
+RESOLUTIONS = [(1280, 720), (1920, 1080), (2560, 1440), (3840, 2160)]
 
 def check_render(label, check_pos=None):
     for vw, vh in RESOLUTIONS:
