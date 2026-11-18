@@ -190,6 +190,32 @@ namespace UFC6OverlaySetup {
                 Assert(runtimeManager.Inspect(folder).Summary(runtimeManager).Contains("Original threading runtime is missing"),"Missing original diagnostic must be actionable.");
                 File.WriteAllBytes(runtime,original);
                 passed.Add("PASS: verified launcher rebuild migration, every migration rollback, complete startup bridge update, settings preservation and missing-runtime diagnostics.");
+
+                // PORTHEON update recovery: detect replaced overlay files across bin and novo, report which engine needs reinstalling, and repair safely.
+                runtimeManager.NewEngine = manager.NewEngine;
+                runtimeManager.Apply(folder,false);
+                runtimeManager.Apply(novo,false);
+                File.WriteAllBytes(Path.Combine(folder,"version.dll"),Bytes("portheon updated version.dll"));
+                File.WriteAllBytes(Path.Combine(novo,"winmm.dll"),Bytes("portheon updated winmm.dll"));
+                Inspection binRecovery = runtimeManager.Inspect(folder);
+                string binSummary = binRecovery.Summary(runtimeManager);
+                Assert(binRecovery.PortheonReplaced && binRecovery.ReplacedFiles.Contains("version.dll"),"Bin PORTHEON replacement must be detected.");
+                Assert(binSummary.Contains("PORTHEON update detected") && binSummary.Contains("Original / Parsec (bin)") && binSummary.Contains("PS5 Pro / DLSS (novo)"),"Bin recovery summary must identify both affected engines.");
+                Inspection novoRecovery = runtimeManager.Inspect(novo);
+                string novoSummary = novoRecovery.Summary(runtimeManager.NewEngine);
+                Assert(novoRecovery.PortheonReplaced && novoRecovery.ReplacedFiles.Contains("winmm.dll"),"Novo PORTHEON replacement must be detected.");
+                Assert(novoSummary.Contains("PORTHEON update detected") && novoSummary.Contains("PS5 Pro / DLSS (novo)") && novoSummary.Contains("Original / Parsec (bin)"),"Novo recovery summary must identify both affected engines.");
+                Reject(() => runtimeManager.Apply(folder,false),"Standard install must still reject replaced files without explicit repair.");
+                Reject(() => runtimeManager.Apply(novo,false),"Standard new-engine install must still reject replaced files without explicit repair.");
+                runtimeManager.Apply(folder,false,true);
+                Assert(runtimeManager.Inspect(folder).Current == runtimeManager.Order.Count && !runtimeManager.Inspect(folder).PortheonReplaced,"Repair must restore all bin overlay files.");
+                Assert(Directory.GetFiles(folder,"ufc6-quit-menu.repaired-*.bak").Any(),"Repair must back up replaced bin files.");
+                Assert(File.ReadAllText(ini) == settings && File.ReadAllBytes(originalCopy).SequenceEqual(original),"Repair must preserve settings and original runtime copy.");
+                runtimeManager.Apply(novo,false,true);
+                Assert(runtimeManager.Inspect(novo).Current == runtimeManager.NewEngine.Order.Count && !runtimeManager.Inspect(novo).PortheonReplaced,"Repair must restore all novo overlay files.");
+                Assert(File.ReadAllText(newSettings).Contains("UIScale=125"),"New-engine repair must preserve settings.");
+                passed.Add("PASS: PORTHEON update recovery detects replaced files, identifies bin/novo engines needing reinstall, and repairs safely.");
+
                 // Verify the actual embedded release too, without touching a game directory.
                 var embedded = new System.Web.Script.Serialization.JavaScriptSerializer().Deserialize<Release>(Encoding.UTF8.GetString(Program.Resource("release.json")).TrimStart('\ufeff'));
                 new Manager(embedded,embedded.companion_files.Keys.Concat(new [] {"version.dll"}).ToDictionary(n => n,n => Program.Resource(n)));
