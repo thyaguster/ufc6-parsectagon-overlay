@@ -82,7 +82,7 @@ static uint32_t menu_career_amount(const MenuState *s,int kind){
 static int menu_training_multiplier(const MenuState *s){static const int values[]={1,2,5,10};return values[s->training_multiplier_index>=0&&s->training_multiplier_index<4?s->training_multiplier_index:0];}
 static int menu_career_row(int kind){return kind==5?9:3+kind;}
 static int menu_setting_page(int page){return page==PAGE_SETTINGS||page==PAGE_APPEARANCE||page==PAGE_CONTROLS||page==PAGE_GAME_SETTINGS||page==PAGE_TOOLS||page==PAGE_EXPERIMENTAL;}
-static int menu_modern_settings_page(const MenuState *s){return s->layout_style!=LAYOUT_CLASSIC&&(s->page==PAGE_SETTINGS_HOME||s->page==PAGE_APPEARANCE||s->page==PAGE_CONTROLS||s->page==PAGE_GAME_SETTINGS||s->page==PAGE_TOOLS||s->page==PAGE_EXPERIMENTAL||s->page==PAGE_THEME||s->page==PAGE_KEYBINDS||s->page==PAGE_BINDING||s->page==PAGE_GAME_ICONS||s->page==PAGE_STARTUP||s->page==PAGE_PERFORMANCE||s->page==PAGE_CHEATS||s->page==PAGE_BACKUPS||s->page==PAGE_PHOTO||s->page==PAGE_PHOTO_CONTROLS||s->page==PAGE_PHOTO_EFFECTS||s->page==PAGE_PHOTO_WATERMARK);}
+static int menu_modern_settings_page(const MenuState *s){return s->layout_style!=LAYOUT_CLASSIC&&(s->page==PAGE_SETTINGS||s->page==PAGE_SETTINGS_HOME||s->page==PAGE_APPEARANCE||s->page==PAGE_CONTROLS||s->page==PAGE_GAME_SETTINGS||s->page==PAGE_TOOLS||s->page==PAGE_EXPERIMENTAL||s->page==PAGE_THEME||s->page==PAGE_KEYBINDS||s->page==PAGE_BINDING||s->page==PAGE_GAME_ICONS||s->page==PAGE_STARTUP||s->page==PAGE_PERFORMANCE||s->page==PAGE_CHEATS||s->page==PAGE_BACKUPS||s->page==PAGE_PHOTO||s->page==PAGE_PHOTO_CONTROLS||s->page==PAGE_PHOTO_EFFECTS||s->page==PAGE_PHOTO_WATERMARK);}
 static int menu_modern_dialog_page(const MenuState *s){return s->layout_style!=LAYOUT_CLASSIC&&(s->page==PAGE_RESTART||s->page==PAGE_SHUTDOWN||s->page==PAGE_REBOOT||s->page==PAGE_SCREENSHOT||s->page==PAGE_RESET||s->page==PAGE_CAREER_ADD||s->page==PAGE_GAME_ICONS_CONFIRM||s->page==PAGE_PERFORMANCE_RESTART||s->page==PAGE_PERFORMANCE_DISCARD||s->page==PAGE_STARTUP_CONFIRM||s->page==PAGE_QUIT||s->page==PAGE_AVATAR_REPAIR||s->page==PAGE_AVATAR_ALWAYS||s->page==PAGE_LOBBY_ACCOUNT);}
 static int menu_modern_welcome_page(const MenuState *s){return s->layout_style!=LAYOUT_CLASSIC&&s->page==PAGE_WELCOME;}
 static int menu_setting_id(int page,int row){
@@ -199,7 +199,7 @@ static int lobby_grid_columns(const MenuState *s){return s->online_takeover&&s->
 static int lobby_columns_for_viewport(uint32_t width){return width>=2200?4:width>=1700?3:2;}
 static int lobby_visible_rooms(const MenuState *s){int limit=s->online_takeover&&lobby_grid_columns(s)==2?2:lobby_grid_columns(s)*2;return s->lobby_room_count<limit?s->lobby_room_count:limit;}
 static int lobby_cards_bottom(const MenuState *s){int rooms=lobby_visible_rooms(s),columns=lobby_grid_columns(s);if(s->online_takeover)return 328+226+214;if(!rooms)return 488;return 328+((rooms+columns-1)/columns-1)*226+214;}
-static int menu_visible_rows(const MenuState *s){int count=menu_rows(s);if(menu_modern_settings_page(s)||menu_modern_dialog_page(s))return count;int capacity=s->page==PAGE_LOBBY?8+lobby_visible_rooms(s):s->window_size==2?12:s->window_size==1?9:6;return count<capacity?count:capacity;}
+static int menu_visible_rows(const MenuState *s){int count=menu_rows(s);if(menu_modern_settings_page(s))return count<9?count:9;if(menu_modern_dialog_page(s))return count;int capacity=s->page==PAGE_LOBBY?8+lobby_visible_rooms(s):s->window_size==2?12:s->window_size==1?9:6;return count<capacity?count:capacity;}
 static inline uint32_t menu_canvas_width(const MenuState *s){
     if(s->page==PAGE_LOBBY_HOME||s->page==PAGE_STREAM_PRESETS||s->page==PAGE_HOST_FIGHT)return 1760u;
     if(s->page==PAGE_LOBBY)return (lobby_grid_columns(s)==4?1760u:lobby_grid_columns(s)==3?1200u:840u);
@@ -216,8 +216,8 @@ static inline uint32_t menu_canvas_width(const MenuState *s){
 static uint32_t menu_canvas_height(const MenuState *s){
     if(s->page==PAGE_LOBBY_HOME||s->page==PAGE_STREAM_PRESETS||s->page==PAGE_HOST_FIGHT)return 918u;
     if(s->page==PAGE_LOBBY){uint32_t height=(uint32_t)lobby_cards_bottom(s)+150u;return height<555u?555u:height;}
-    if(menu_modern_settings_page(s))return 220u+(uint32_t)menu_rows(s)*52u;
-    if(menu_modern_dialog_page(s))return 560u;
+    if(menu_modern_settings_page(s))return 196u+(uint32_t)menu_visible_rows(s)*48u;
+    if(menu_modern_dialog_page(s))return 510u;
     if(menu_modern_welcome_page(s))return 660u;
     if(s->page==PAGE_MAIN&&s->layout_style==LAYOUT_TOPBAR)return 480u;
     if(s->page==PAGE_MAIN&&s->layout_style==LAYOUT_ISLAND)return 450u;

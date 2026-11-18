@@ -2036,26 +2036,31 @@ static void draw_menu(HDC dc, RECT r) {
         static const wchar_t *category_names[]={L"Appearance",L"Controls",L"Game & launcher",L"Files & support",L"Performance",L"Fighter account",L"Back"};
         static const wchar_t *category_values[]={L"Theme & size",L"Input",L"Startup",L"Files",L"Graphics",L"Parsectagon",L"Return"};
         int section=state.page==PAGE_SETTINGS_HOME?0:state.page==PAGE_APPEARANCE?1:state.page==PAGE_CONTROLS?2:state.page==PAGE_GAME_SETTINGS?3:state.page==PAGE_TOOLS?4:5;
-        const wchar_t *page_title=state.page==PAGE_THEME?L"Theme":state.page==PAGE_KEYBINDS?L"Keybinds":state.page==PAGE_BINDING?binding_names[state.binding_action]:state.page==PAGE_GAME_ICONS?L"Game input icons":state.page==PAGE_STARTUP?L"Startup screens":state.page==PAGE_PERFORMANCE?L"Performance":state.page==PAGE_CHEATS?L"Cheats":state.page==PAGE_BACKUPS?L"Savegame backups":state.page==PAGE_PHOTO?L"Photo Mode":state.page==PAGE_PHOTO_CONTROLS?L"Photo controls":state.page==PAGE_PHOTO_EFFECTS?L"Filters & effects":state.page==PAGE_PHOTO_WATERMARK?L"Photo watermark":titles[section];
-        const wchar_t *page_description=state.page==PAGE_THEME?L"Choose a color preset":state.page==PAGE_KEYBINDS?L"Assign keyboard keys and controller combinations":state.page==PAGE_BINDING?L"Record or clear an input":state.page==PAGE_GAME_ICONS?L"Choose prompts and edit game mappings":state.page==PAGE_STARTUP?L"Manage title and network bypass":state.page==PAGE_PERFORMANCE?L"PORTHEON graphics options; restart to apply":state.page==PAGE_CHEATS?L"Fight and career options for Player 1":state.page==PAGE_BACKUPS?L"Save in UFC 6 before backing up":state.page==PAGE_PHOTO?L"Camera, freeze and capture controls":state.page==PAGE_PHOTO_CONTROLS?L"Close the overlay to control the camera":state.page==PAGE_PHOTO_EFFECTS?L"Adjust effects while Photo Mode is active":state.page==PAGE_PHOTO_WATERMARK?L"Style the name used in screenshots":descriptions[section];
-        RECT panel={26,18,r.right-26,r.bottom-18};
+        const wchar_t *page_title=state.page==PAGE_SETTINGS?L"All settings":state.page==PAGE_THEME?L"Theme":state.page==PAGE_KEYBINDS?L"Keybinds":state.page==PAGE_BINDING?binding_names[state.binding_action]:state.page==PAGE_GAME_ICONS?L"Game input icons":state.page==PAGE_STARTUP?L"Startup screens":state.page==PAGE_PERFORMANCE?L"Performance":state.page==PAGE_CHEATS?L"Cheats":state.page==PAGE_BACKUPS?L"Savegame backups":state.page==PAGE_PHOTO?L"Photo Mode":state.page==PAGE_PHOTO_CONTROLS?L"Photo controls":state.page==PAGE_PHOTO_EFFECTS?L"Filters & effects":state.page==PAGE_PHOTO_WATERMARK?L"Photo watermark":titles[section];
+        const wchar_t *page_description=state.page==PAGE_SETTINGS?L"Browse all overlay and system options":state.page==PAGE_THEME?L"Choose a color preset":state.page==PAGE_KEYBINDS?L"Assign keyboard keys and controller combinations":state.page==PAGE_BINDING?L"Record or clear an input":state.page==PAGE_GAME_ICONS?L"Choose prompts and edit game mappings":state.page==PAGE_STARTUP?L"Manage title and network bypass":state.page==PAGE_PERFORMANCE?L"PORTHEON graphics options; restart to apply":state.page==PAGE_CHEATS?L"Fight and career options for Player 1":state.page==PAGE_BACKUPS?L"Save in UFC 6 before backing up":state.page==PAGE_PHOTO?L"Camera, freeze and capture controls":state.page==PAGE_PHOTO_CONTROLS?L"Close the overlay to control the camera":state.page==PAGE_PHOTO_EFFECTS?L"Adjust effects while Photo Mode is active":state.page==PAGE_PHOTO_WATERMARK?L"Style the name used in screenshots":descriptions[section];
+        RECT panel={24,16,r.right-24,r.bottom-16};
         row_surface(dc,panel,bindings.box_style,bindings.box_style==3?22:12,paint_theme.surface,paint_theme.border);
-        RECT eyebrow={54,34,r.right-54,60},heading={54,57,r.right-54,103};
-        text(dc,font_stat_label,L"UFC 6 ACTIONS OVERLAY  /  SETTINGS",eyebrow,paint_theme.accent,DT_LEFT|DT_SINGLELINE);
-        text(dc,font_title,page_title,heading,paint_theme.text,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
-        RECT info={54,102,r.right-54,128};
-        text(dc,font_small,page_description,info,paint_theme.muted,DT_LEFT|DT_SINGLELINE);
-        int rows=menu_rows(&state);
-        for(int i=0;i<rows;++i){
-            int top=132+i*52,focused=i==state.selection;
-            RECT row={48,top,r.right-48,top+44};
+        RECT eyebrow={50,30,r.right-50,54},heading={50,52,r.right-50,96};
+        text(dc,font_stat_label,L"PARSECTAGON OVERLAY  /  SETTINGS",eyebrow,paint_theme.accent,DT_LEFT|DT_SINGLELINE);
+        text(dc,font_title,page_title,heading,paint_theme.text,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
+        int rows=menu_rows(&state),visible=menu_visible_rows(&state),first=menu_first_row(&state);
+        RECT info={50,96,rows>visible?r.right-220:r.right-50,120};
+        text(dc,font_small,page_description,info,paint_theme.muted,DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS);
+        if(rows>visible){
+            wchar_t range[48];swprintf(range,48,L"Items %d–%d of %d  ↕",first+1,first+visible,rows);
+            RECT range_box={r.right-216,96,r.right-50,120};
+            text(dc,font_small,range,range_box,paint_theme.accent,DT_RIGHT|DT_SINGLELINE);
+        }
+        for(int idx=0;idx<visible;++idx){
+            int i=first+idx,top=126+idx*48,focused=i==state.selection;
+            RECT row={48,top,r.right-48,top+42};
             row_surface(dc,row,bindings.box_style,bindings.box_style==3?18:7,focused?paint_theme.focus:RGB(15,20,28),focused?paint_theme.focus_border:paint_theme.border);
-            if(focused){RECT marker={row.left+1,top+7,row.left+4,top+37};HBRUSH b=CreateSolidBrush(paint_theme.accent);FillRect(dc,&marker,b);DeleteObject(b);}
+            if(focused){RECT marker={row.left+1,top+7,row.left+4,top+35};HBRUSH b=CreateSolidBrush(paint_theme.accent);FillRect(dc,&marker,b);DeleteObject(b);}
             int id=menu_setting_page(state.page)?menu_setting_id(state.page,i):-1;
             const wchar_t *label=state.page==PAGE_SETTINGS_HOME?category_names[i]:state.page==PAGE_THEME?theme_choices[i]:state.page==PAGE_KEYBINDS?(i==BIND_COUNT?L"Back":binding_names[i]):state.page==PAGE_BINDING?binding_labels[i]:state.page==PAGE_GAME_ICONS?game_icons_labels[i]:state.page==PAGE_STARTUP?startup_labels[i]:state.page==PAGE_PERFORMANCE?performance_labels[i]:state.page==PAGE_CHEATS?cheat_labels[i]:state.page==PAGE_BACKUPS?backup_labels[i]:state.page==PAGE_PHOTO?photo_labels[i]:state.page==PAGE_PHOTO_CONTROLS?photo_control_labels[i]:state.page==PAGE_PHOTO_EFFECTS?effect_labels[i]:state.page==PAGE_PHOTO_WATERMARK?mark_labels[i]:setting_labels[id];
-            RECT label_box={row.left+20,top+2,row.right-274,top+42};
+            RECT label_box={row.left+18,top+2,row.right-270,top+40};
             text(dc,font_main,label,label_box,focused?RGB(255,255,255):paint_theme.text,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
-            RECT control={row.right-260,top+7,row.right-14,top+37};
+            RECT control={row.right-258,top+6,row.right-14,top+36};
             if(state.page==PAGE_SETTINGS_HOME){value_chip(dc,control,category_values[i],focused,0);continue;}
             if(id<0){
                 wchar_t detail[80]={0};const wchar_t *special=L"Open";int special_toggle=-1,special_arrows=0;
@@ -2105,42 +2110,37 @@ static void draw_menu(HDC dc, RECT r) {
             if(toggle>=0)toggle_switch(dc,control,toggle,focused);
             else value_chip(dc,control,value?value:L"Open",focused,arrows);
         }
-        int footer_top=r.bottom-65;
-        RECT line={48,footer_top-10,r.right-48,footer_top-9};HBRUSH divider=CreateSolidBrush(paint_theme.border);FillRect(dc,&line,divider);DeleteObject(divider);
-        dpad_icon(dc,56,footer_top,ps);
-        RECT nav={96,footer_top+3,218,footer_top+30};text(dc,font_small,L"Navigate",nav,paint_theme.muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
-        button_icon(dc,236,footer_top,0,ps);
-        RECT select_hint={273,footer_top+3,420,footer_top+30};text(dc,font_small,L"Select / change",select_hint,paint_theme.muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
-        button_icon(dc,440,footer_top,1,ps);
-        RECT back_hint={477,footer_top+3,580,footer_top+30};text(dc,font_small,L"Back",back_hint,paint_theme.muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+        RECT foot={48,r.bottom-58,r.right-48,r.bottom-24};
+        draw_modern_footer(dc,foot,&state,&paint_theme,bindings.box_style,ps,message[0]?message:(conflict?L"Game Bar active":L""),1);
         return;
     }
     if(menu_modern_welcome_page(&state)){
-        RECT panel={26,18,r.right-26,r.bottom-18};
+        RECT panel={24,16,r.right-24,r.bottom-16};
         row_surface(dc,panel,bindings.box_style,bindings.box_style==3?22:12,paint_theme.surface,paint_theme.border);
-        RECT eyebrow={54,34,r.right-54,58},title_box={54,57,r.right-54,104},intro={54,105,r.right-54,133};
+        RECT eyebrow={50,30,r.right-50,54},title_box={50,53,r.right-50,100},intro={50,101,r.right-50,129};
         text(dc,font_stat_label,L"FIRST RUN",eyebrow,paint_theme.accent,DT_LEFT|DT_SINGLELINE);
-        text(dc,font_title,L"UFC 6 Actions Overlay",title_box,paint_theme.text,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+        text(dc,font_title,L"UFC 6 Parsectagon Overlay",title_box,paint_theme.text,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
         text(dc,font_small,L"Review the active defaults and your game compatibility.",intro,paint_theme.muted,DT_LEFT|DT_SINGLELINE);
         const wchar_t *names[]={L"Skip intros",L"Suppress online notices",L"Guide button opens overlay",L"Launch UFC 6 after PC restart"};
         const int enabled[]={state.skip_splashes,state.suppress_online_notices,menu_guide_enabled(&state),menu_auto_launch(&state)};
-        RECT section={54,145,r.right-54,171};text(dc,font_stat_label,L"CURRENT SETTINGS",section,paint_theme.accent,DT_LEFT|DT_SINGLELINE);
+        RECT section={50,145,r.right-50,171};text(dc,font_stat_label,L"CURRENT SETTINGS",section,paint_theme.accent,DT_LEFT|DT_SINGLELINE);
         for(int i=0;i<4;++i){int y=176+i*47;RECT box={48,y,r.right-48,y+41};row_surface(dc,box,bindings.box_style,bindings.box_style==3?19:7,RGB(15,20,28),paint_theme.border);RECT label={box.left+18,y+4,box.right-100,y+37},value={box.right-83,y+4,box.right-18,y+37};text(dc,font_main,names[i],label,paint_theme.text,DT_LEFT|DT_VCENTER|DT_SINGLELINE);text(dc,font_small,enabled[i]?L"On":L"Off",value,enabled[i]?paint_theme.accent:paint_theme.muted,DT_RIGHT|DT_VCENTER|DT_SINGLELINE);}
-        RECT compatibility={54,373,r.right-54,398};text(dc,font_stat_label,L"GAME & CHEAT COMPATIBILITY",compatibility,paint_theme.accent,DT_LEFT|DT_SINGLELINE);
+        RECT compatibility={50,373,r.right-50,398};text(dc,font_stat_label,L"GAME & CHEAT COMPATIBILITY",compatibility,paint_theme.accent,DT_LEFT|DT_SINGLELINE);
         RECT version={48,405,r.right-48,447};row_surface(dc,version,bindings.box_style,bindings.box_style==3?19:7,RGB(15,20,28),paint_theme.border);RECT version_label={66,409,r.right-235,443},version_value={r.right-226,409,r.right-66,443};text(dc,font_main,L"Installed UFC 6",version_label,paint_theme.text,DT_LEFT|DT_VCENTER|DT_SINGLELINE);text(dc,font_small,installed_game_version.known?installed_game_version.label:L"Unknown",version_value,installed_game_version.older_than_01006?RGB(255,196,94):paint_theme.accent,DT_RIGHT|DT_VCENTER|DT_SINGLELINE);
         RECT advice_box={48,454,r.right-48,500},advice={65,460,r.right-65,494};row_surface(dc,advice_box,bindings.box_style,bindings.box_style==3?18:7,RGB(45,39,25),RGB(158,121,53));const wchar_t *advice_text=installed_game_version.older_than_01006?L"Cheats may fail. Update UFC 6 to v01.006 or newer.":installed_game_version.known?L"Cheats target v01.006; older versions may not work.":L"Cheat support unknown. UFC 6 v01.006 is recommended.";text(dc,font_small,advice_text,advice,RGB(255,207,105),DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
         RECT button={48,521,r.right-48,565};row_surface(dc,button,bindings.box_style,bindings.box_style==3?18:7,paint_theme.focus,paint_theme.focus_border);RECT button_text={68,525,r.right-68,561};text(dc,font_main,L"Continue to overlay",button_text,paint_theme.text,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
-        int foot=r.bottom-57;button_icon(dc,54,foot,0,ps);RECT hint={91,foot+2,260,foot+30};text(dc,font_small,L"Continue",hint,paint_theme.muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE);button_icon(dc,282,foot,1,ps);RECT back={319,foot+2,520,foot+30};text(dc,font_small,L"Continue",back,paint_theme.muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+        RECT foot={48,r.bottom-58,r.right-48,r.bottom-24};
+        draw_modern_footer(dc,foot,&state,&paint_theme,bindings.box_style,ps,L"Continue",1);
         return;
     }
     if(menu_modern_dialog_page(&state)){
         const wchar_t *heading=state.page==PAGE_LOBBY_ACCOUNT?L"Parsectagon account":state.page==PAGE_AVATAR_REPAIR?L"Fix career avatar":state.page==PAGE_AVATAR_ALWAYS?L"Image readback always on":state.page==PAGE_STARTUP_CONFIRM?(state.startup_patch_enable?L"Enable startup bypass?":L"Restore startup screens?"):state.page==PAGE_PERFORMANCE_RESTART?L"Save and restart?":state.page==PAGE_PERFORMANCE_DISCARD?L"Discard edits?":state.page==PAGE_GAME_ICONS_CONFIRM?(state.game_icons_style==0?L"Apply Xbox icons?":state.game_icons_style==1?L"Apply keyboard icons?":L"Restore PlayStation icons?"):state.page==PAGE_CAREER_ADD?(state.career_kind==CAREER_GRADES?L"Set all grades to A?":state.career_kind==CAREER_DAYS?L"Refill training days?":state.career_kind==CAREER_FITNESS?L"Restore fitness?":state.career_kind==0?L"Add money?":L"Add skill points?"):state.page==PAGE_SCREENSHOT?L"Screenshot saved":state.page==PAGE_RESET?L"Reset settings?":state.page==PAGE_RESTART?L"Restart game?":state.page==PAGE_QUIT?L"Quit game?":state.page==PAGE_REBOOT?(state.shutdown_countdown?L"Restarting PC":L"Restart PC?"):(state.shutdown_countdown?L"Shutting down PC":L"Shut down PC?");
         const wchar_t *description=state.page==PAGE_LOBBY_ACCOUNT?L"Link in your browser. Only fight reports can be uploaded.":state.page==PAGE_AVATAR_REPAIR?L"Rebuild a striped Saved Careers portrait.":state.page==PAGE_AVATAR_ALWAYS?L"Experimental image readback; a restart is required.":state.page==PAGE_STARTUP_CONFIRM?L"Save your progress before the game restarts.":state.page==PAGE_PERFORMANCE_RESTART?L"Save graphics settings and relaunch through PORTHEON.":state.page==PAGE_PERFORMANCE_DISCARD?L"Keep editing or discard unsaved graphics changes.":state.page==PAGE_GAME_ICONS_CONFIRM?L"The game will close and relaunch through your launcher.":state.page==PAGE_CAREER_ADD?L"This change applies once and is included in normal game saves.":state.page==PAGE_SCREENSHOT?L"The capture is saved in your Windows Screenshots folder.":state.page==PAGE_RESET?L"Restore overlay and launcher defaults.":state.page==PAGE_RESTART?L"Close this session and use the saved launcher settings.":state.page==PAGE_QUIT?L"Close UFC 6 normally through your launcher.":state.page==PAGE_REBOOT?(menu_auto_launch(&state)?L"Game auto-launch: On. Change it in Settings.":L"Game auto-launch: Off. Change it in Settings."):L"Close the game and turn off this PC.";
-        RECT panel={26,18,r.right-26,r.bottom-18};
+        RECT panel={24,16,r.right-24,r.bottom-16};
         row_surface(dc,panel,bindings.box_style,bindings.box_style==3?22:12,paint_theme.surface,paint_theme.border);
-        RECT eyebrow={54,34,r.right-54,60},title_box={54,57,r.right-54,103},info={54,105,r.right-54,132};
-        text(dc,font_stat_label,L"UFC 6 ACTIONS OVERLAY",eyebrow,paint_theme.accent,DT_LEFT|DT_SINGLELINE);
-        text(dc,font_title,heading,title_box,paint_theme.text,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+        RECT eyebrow={50,30,r.right-50,54},title_box={50,52,r.right-50,96},info={50,97,r.right-50,123};
+        text(dc,font_stat_label,L"PARSECTAGON OVERLAY  /  CONFIRMATION",eyebrow,paint_theme.accent,DT_LEFT|DT_SINGLELINE);
+        text(dc,font_title,heading,title_box,paint_theme.text,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
         text(dc,font_small,description,info,paint_theme.muted,DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS);
         wchar_t detail[256]=L"",detail2[256]=L"";
         if(state.page==PAGE_LOBBY_ACCOUNT){
@@ -2155,7 +2155,7 @@ static void draw_menu(HDC dc, RECT r) {
             else if(state.avatar_mode==1){steps[0]=L"Image readback is On for this repair session.";steps[1]=L"Open Edit Appearance; save without changes.";steps[2]=L"Check the portrait in Saved Careers.";steps[3]=L"Finish restores settings and restarts UFC 6.";}
             else if(state.avatar_mode==2){steps[0]=L"Image readback is already always On.";steps[1]=L"Open Edit Appearance; save without changes.";steps[2]=L"Check the portrait in Saved Careers.";steps[3]=L"Use the switch to turn readback Off later.";}
             else{steps[0]=L"Save your game progress before starting.";steps[1]=L"Restart UFC 6 with image readback On.";steps[2]=L"Open Edit Appearance; save without changes.";steps[3]=L"Return here; Finish restores settings and restarts.";}
-            for(int i=0;i<4;++i){RECT step={60,150+i*31,r.right-60,179+i*31};text(dc,font_small,steps[i],step,i==1&&state.page==PAGE_AVATAR_ALWAYS?RGB(245,190,88):paint_theme.muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);}
+            for(int i=0;i<4;++i){RECT step={56,142+i*30,r.right-56,170+i*30};text(dc,font_small,steps[i],step,i==1&&state.page==PAGE_AVATAR_ALWAYS?RGB(245,190,88):paint_theme.muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);}
         }else if(state.page==PAGE_SCREENSHOT){swprintf(detail,256,L"Saved file: %ls",filename);}
         else if(state.page==PAGE_CAREER_ADD){wchar_t amount[32],balance[32];int kind=state.career_kind;format_number(kind==CAREER_GRADES?0:kind==CAREER_DAYS?7:kind==CAREER_FITNESS?100:menu_career_amount(&state,kind),amount);format_number(kind==CAREER_GRADES?0:kind==CAREER_DAYS?career_state.training_days:kind==CAREER_FITNESS?career_state.fitness/100:career_state.balance[kind],balance);swprintf(detail,256,kind==CAREER_GRADES?L"Set every sparring challenge pack to Grade A":kind==CAREER_DAYS?L"Restore 7 days in this training week":kind==CAREER_FITNESS?L"Set this career fighter to 100%% fitness":kind==0?L"Add $%ls to this career":L"Add %ls skill points to this career",amount);swprintf(detail2,256,kind==CAREER_GRADES?L"Includes unattempted packs. Save normally.":kind==CAREER_DAYS?L"Current training days: %ls":kind==CAREER_FITNESS?L"Current fitness: %ls%%":kind==0?L"Current balance: $%ls":L"Current skill points: %ls",balance);}
         else if(state.page==PAGE_RESET){wcscpy(detail,L"Windows Game Bar preference and screenshots are kept.");}
@@ -2165,12 +2165,13 @@ static void draw_menu(HDC dc, RECT r) {
         else if(state.page==PAGE_PERFORMANCE_DISCARD){wcscpy(detail,L"Discarding keeps settings currently saved in PORTHEON.");}
         else if(state.page==PAGE_REBOOT||state.page==PAGE_SHUTDOWN){if(state.shutdown_countdown)swprintf(detail,256,L"%d seconds to cancel",state.shutdown_seconds);else wcscpy(detail,L"Hold the confirm button for three seconds. A ten-second cancel window follows.");}
         else if(state.page==PAGE_RESTART||state.page==PAGE_QUIT){wcscpy(detail,L"Unsaved game progress may be lost.");}
-        if(detail[0]){RECT line={60,162,r.right-60,194};text(dc,font_main,detail,line,state.page==PAGE_REBOOT||state.page==PAGE_SHUTDOWN||state.page==PAGE_LOBBY_ACCOUNT?paint_theme.accent:paint_theme.text,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);}
-        if(detail2[0]){RECT line={60,203,r.right-60,235};text(dc,font_small,detail2,line,paint_theme.muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);}
-        if(menu_power_page(&state)&&state.shutdown_holding){RECT track={60,270,r.right-60,279};HBRUSH background=CreateSolidBrush(paint_theme.border);FillRect(dc,&track,background);DeleteObject(background);RECT fill=track;fill.right=fill.left+(fill.right-fill.left)*state.shutdown_progress/3000;HBRUSH accent=CreateSolidBrush(paint_theme.accent);FillRect(dc,&fill,accent);DeleteObject(accent);}
+        if(detail[0]){RECT line={56,152,r.right-56,184};text(dc,font_main,detail,line,state.page==PAGE_REBOOT||state.page==PAGE_SHUTDOWN||state.page==PAGE_LOBBY_ACCOUNT?paint_theme.accent:paint_theme.text,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);}
+        if(detail2[0]){RECT line={56,192,r.right-56,222};text(dc,font_small,detail2,line,paint_theme.muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);}
+        if(menu_power_page(&state)&&state.shutdown_holding){RECT track={56,256,r.right-56,265};HBRUSH background=CreateSolidBrush(paint_theme.border);FillRect(dc,&track,background);DeleteObject(background);RECT fill=track;fill.right=fill.left+(fill.right-fill.left)*state.shutdown_progress/3000;HBRUSH accent=CreateSolidBrush(paint_theme.accent);FillRect(dc,&fill,accent);DeleteObject(accent);}
         int rows=menu_rows(&state);
-        for(int i=0;i<rows;++i){const wchar_t *label=state.page==PAGE_STARTUP_CONFIRM?(i==0?L"Cancel":state.startup_patch_enable?L"Enable and restart game":L"Restore and restart game"):state.page==PAGE_LOBBY_ACCOUNT?lobby_account_labels[i]:state.page==PAGE_AVATAR_REPAIR?avatar_repair_labels[i]:state.page==PAGE_AVATAR_ALWAYS?avatar_always_labels[i]:state.page==PAGE_PERFORMANCE_RESTART?performance_restart[i]:state.page==PAGE_PERFORMANCE_DISCARD?performance_discard[i]:state.page==PAGE_GAME_ICONS_CONFIRM?game_icons_confirm_labels[i]:state.page==PAGE_CAREER_ADD?career_labels[i]:state.page==PAGE_SCREENSHOT?screenshot_labels[i]:state.page==PAGE_RESET?reset_labels[i]:state.page==PAGE_QUIT?quit_labels[i]:menu_power_page(&state)?shutdown_labels[i]:restart_labels[i];int top=330+i*52,focused=i==state.selection;RECT row={48,top,r.right-48,top+44};row_surface(dc,row,bindings.box_style,bindings.box_style==3?18:7,focused?paint_theme.focus:RGB(15,20,28),focused?paint_theme.focus_border:paint_theme.border);if(focused){RECT marker={row.left+1,top+7,row.left+4,top+37};HBRUSH b=CreateSolidBrush(paint_theme.accent);FillRect(dc,&marker,b);DeleteObject(b);}RECT text_box={row.left+20,top+2,row.right-20,top+42};text(dc,font_main,label,text_box,focused?paint_theme.text:paint_theme.muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);}
-        int footer_top=r.bottom-64;RECT divider={48,footer_top-10,r.right-48,footer_top-9};HBRUSH line=CreateSolidBrush(paint_theme.border);FillRect(dc,&divider,line);DeleteObject(line);dpad_icon(dc,56,footer_top,ps);RECT nav={96,footer_top+3,218,footer_top+30};text(dc,font_small,L"Navigate",nav,paint_theme.muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE);button_icon(dc,236,footer_top,0,ps);RECT confirm={273,footer_top+3,420,footer_top+30};text(dc,font_small,L"Confirm",confirm,paint_theme.muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE);button_icon(dc,440,footer_top,1,ps);RECT back={477,footer_top+3,580,footer_top+30};text(dc,font_small,L"Back",back,paint_theme.muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+        for(int i=0;i<rows;++i){const wchar_t *label=state.page==PAGE_STARTUP_CONFIRM?(i==0?L"Cancel":state.startup_patch_enable?L"Enable and restart game":L"Restore and restart game"):state.page==PAGE_LOBBY_ACCOUNT?lobby_account_labels[i]:state.page==PAGE_AVATAR_REPAIR?avatar_repair_labels[i]:state.page==PAGE_AVATAR_ALWAYS?avatar_always_labels[i]:state.page==PAGE_PERFORMANCE_RESTART?performance_restart[i]:state.page==PAGE_PERFORMANCE_DISCARD?performance_discard[i]:state.page==PAGE_GAME_ICONS_CONFIRM?game_icons_confirm_labels[i]:state.page==PAGE_CAREER_ADD?career_labels[i]:state.page==PAGE_SCREENSHOT?screenshot_labels[i]:state.page==PAGE_RESET?reset_labels[i]:state.page==PAGE_QUIT?quit_labels[i]:menu_power_page(&state)?shutdown_labels[i]:restart_labels[i];int top=304+i*50,focused=i==state.selection;RECT row={48,top,r.right-48,top+44};row_surface(dc,row,bindings.box_style,bindings.box_style==3?18:7,focused?paint_theme.focus:RGB(15,20,28),focused?paint_theme.focus_border:paint_theme.border);if(focused){RECT marker={row.left+1,top+7,row.left+4,top+37};HBRUSH b=CreateSolidBrush(paint_theme.accent);FillRect(dc,&marker,b);DeleteObject(b);}RECT text_box={row.left+20,top+2,row.right-20,top+42};text(dc,font_main,label,text_box,focused?paint_theme.text:paint_theme.muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);}
+        RECT foot={48,r.bottom-58,r.right-48,r.bottom-24};
+        draw_modern_footer(dc,foot,&state,&paint_theme,bindings.box_style,ps,message[0]?message:(conflict?L"Game Bar active":L""),1);
         return;
     }
     if(state.page==PAGE_AVATAR_REPAIR||state.page==PAGE_AVATAR_ALWAYS){
@@ -2634,10 +2635,14 @@ __declspec(dllexport) void Ufc6OverlayPosition(uint32_t viewport_width,uint32_t 
     *y=help?photo_help_top(viewport_height):toast?24:(menu.page==PAGE_MAIN&&menu.layout_style!=LAYOUT_CLASSIC?main_y:takeover&&viewport_height>header+height+12?header+12:centered_y);LeaveCriticalSection(&lock);
 }
 static void draw_notification(HDC dc,RECT r){
-    wchar_t message[120];EnterCriticalSection(&lock);paint_theme=current_theme;frame_font_index=(preferences.font_size-16)/2;lstrcpynW(message,status_text,120);LeaveCriticalSection(&lock);
+    wchar_t message[120];int box_style=0;
+    EnterCriticalSection(&lock);paint_theme=current_theme;box_style=preferences.box_style;frame_font_index=(preferences.font_size-16)/2;lstrcpynW(message,status_text,120);LeaveCriticalSection(&lock);
     HBRUSH brush=CreateSolidBrush(paint_theme.background);FillRect(dc,&r,brush);DeleteObject(brush);SetBkMode(dc,TRANSPARENT);
-    RECT edge={0,0,4,r.bottom};brush=CreateSolidBrush(paint_theme.accent);FillRect(dc,&edge,brush);DeleteObject(brush);
-    RECT label={20,12,r.right-16,r.bottom-10};text(dc,font_main,message,label,paint_theme.text,DT_LEFT|DT_VCENTER|DT_WORDBREAK);
+    RECT card={2,2,r.right-2,r.bottom-2};
+    row_surface(dc,card,box_style,box_style==3?14:8,paint_theme.surface,paint_theme.border);
+    RECT edge={card.left+4,card.top+8,card.left+8,card.bottom-8};brush=CreateSolidBrush(paint_theme.accent);FillRect(dc,&edge,brush);DeleteObject(brush);
+    RECT label={card.left+18,card.top+8,card.right-14,card.bottom-8};
+    text(dc,wcslen(message)>48?font_small:font_main,message,label,paint_theme.text,DT_LEFT|DT_VCENTER|DT_WORDBREAK);
 }
 __declspec(dllexport) void Ufc6MenuExtent(uint32_t viewport_width,uint32_t viewport_height,uint32_t *width,uint32_t *height) {
     EnterCriticalSection(&lock);
@@ -2654,7 +2659,7 @@ __declspec(dllexport) void Ufc6MenuExtent(uint32_t viewport_width,uint32_t viewp
         *width=target_width;*height=target_height;
     }
     if((photo_help_visible()||notification_visible())&&viewport_width>32&&viewport_height>32){
-        uint32_t w=(photo_help_visible()?PHOTO_HELP_WIDTH:420)*(uint32_t)menu_scale(&menu)/100,h=(photo_help_visible()?PHOTO_HELP_HEIGHT:80)*(uint32_t)menu_scale(&menu)/100;
+        uint32_t w=(photo_help_visible()?PHOTO_HELP_WIDTH:460)*(uint32_t)menu_scale(&menu)/100,h=(photo_help_visible()?PHOTO_HELP_HEIGHT:92)*(uint32_t)menu_scale(&menu)/100;
         if(w>viewport_width-32){h=(uint32_t)((uint64_t)h*(viewport_width-32)/w);w=viewport_width-32;}
         uint32_t max_height=photo_help_visible()?viewport_height-photo_help_top(viewport_height)-16:viewport_height-32;
         if(h>max_height){w=(uint32_t)((uint64_t)w*max_height/h);h=max_height;}
@@ -2766,8 +2771,10 @@ static LRESULT CALLBACK overlay_proc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
         for(int i=0;i<menu_rows(&menu);++i){
             if(menu_scroll_page(menu.page)&&(i<first||i>=first+menu_visible_rows(&menu)))continue;
             if(menu_modern_settings_page(&menu)||menu_modern_dialog_page(&menu)||menu_modern_welcome_page(&menu)){
-                int top=menu_modern_welcome_page(&menu)?521:menu_modern_dialog_page(&menu)?330+i*52:132+i*52;
-                if(y>=top&&y<top+44)selected=i;
+                int idx=i-first;
+                int top=menu_modern_welcome_page(&menu)?521:menu_modern_dialog_page(&menu)?304+idx*50:126+idx*48;
+                int row_h=menu_modern_settings_page(&menu)?42:44;
+                if(y>=top&&y<top+row_h)selected=i;
                 continue;
             }
             int top,height;row_geometry(menu.page,i,first,menu.lobby_room_count,lobby_grid_columns(&menu),lobby_visible_rooms(&menu),menu.online_takeover,&top,&height);if(y>=top&&y<top+height)selected=i;
