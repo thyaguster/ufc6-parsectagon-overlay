@@ -216,6 +216,22 @@ namespace UFC6OverlaySetup {
                 Assert(File.ReadAllText(newSettings).Contains("UIScale=125"),"New-engine repair must preserve settings.");
                 passed.Add("PASS: PORTHEON update recovery detects replaced files, identifies bin/novo engines needing reinstall, and repairs safely.");
 
+                // ApplyAll installs, repairs, and removes both Original / Parsec (bin) and PS5 Pro / DLSS (novo) together when selecting the root UFC6 folder.
+                string ufc6Root = Directory.GetParent(folder).FullName;
+                runtimeManager.Apply(folder,true);
+                runtimeManager.Apply(novo,true);
+                string bothInstallMsg = runtimeManager.ApplyAll(ufc6Root,false,false);
+                Assert(bothInstallMsg.Contains("Original / Parsec (bin)") && bothInstallMsg.Contains("PS5 Pro / DLSS (novo)"),"ApplyAll must report installing both engines.");
+                Assert(runtimeManager.Inspect(folder).Current == runtimeManager.Order.Count && runtimeManager.Inspect(novo).Current == runtimeManager.NewEngine.Order.Count,"ApplyAll must install both bin and novo.");
+                File.WriteAllBytes(Path.Combine(novo,"winmm.dll"),Bytes("portheon updated novo winmm"));
+                Assert(runtimeManager.Inspect(folder).SiblingPortheonReplaced,"Inspecting bin must detect PORTHEON replacement in sibling novo.");
+                runtimeManager.ApplyAll(ufc6Root,false,true);
+                Assert(runtimeManager.Inspect(novo).Current == runtimeManager.NewEngine.Order.Count && !runtimeManager.Inspect(novo).PortheonReplaced,"ApplyAll repair from root must repair sibling novo too.");
+                string bothRemoveMsg = runtimeManager.ApplyAll(ufc6Root,true,false);
+                Assert(bothRemoveMsg.Contains("Original / Parsec (bin)") && bothRemoveMsg.Contains("PS5 Pro / DLSS (novo)"),"ApplyAll must report removing both engines.");
+                Assert(runtimeManager.Inspect(folder).Installed == 0 && runtimeManager.Inspect(novo).Installed == 0,"ApplyAll remove must uninstall both bin and novo.");
+                passed.Add("PASS: ApplyAll installs, repairs, and removes both bin and novo together from the root UFC6 folder.");
+
                 // Verify the actual embedded release too, without touching a game directory.
                 var embedded = new System.Web.Script.Serialization.JavaScriptSerializer().Deserialize<Release>(Encoding.UTF8.GetString(Program.Resource("release.json")).TrimStart('\ufeff'));
                 new Manager(embedded,embedded.companion_files.Keys.Concat(new [] {"version.dll"}).ToDictionary(n => n,n => Program.Resource(n)));
