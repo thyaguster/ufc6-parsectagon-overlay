@@ -1628,6 +1628,35 @@ static void draw_modern_footer(HDC dc, RECT footer, const MenuState *state, cons
     int icon_sz = 20;
     int icon_y = footer.top + (footer.bottom - footer.top - icon_sz) / 2;
     int x = footer.left + 12;
+    if (state->page == PAGE_FAVORITE_SEARCH) {
+        const struct { uint32_t bit; const wchar_t *label; int w; } tips[] = {
+            { PAD_A, state->fav_search_mode ? L"Enter/Open" : L"Enter/Pin", 96 },
+            { PAD_X, L"Del", 52 },
+            { PAD_Y, L"Space", 68 },
+            { PAD_LB, L"Clear", 80 },
+            { PAD_B, L"Back", 58 }
+        };
+        for (int ti = 0; ti < 5 && x + tips[ti].w < footer.right - 8; ++ti) {
+            if (tips[ti].bit == PAD_LB) {
+                int by = footer.top + (footer.bottom - footer.top - 16) / 2;
+                controller_artwork_draw(dc, x, by, 20, 16, PAD_LB, ps);
+                controller_artwork_draw(dc, x + 22, by, 20, 16, PAD_RB, ps);
+                RECT lr = { x + 46, footer.top, x + tips[ti].w + 18, footer.bottom };
+                text(dc, font_small, tips[ti].label, lr, theme->muted, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+                x += tips[ti].w + 20;
+            } else {
+                controller_artwork_draw(dc, x, icon_y, icon_sz, icon_sz, tips[ti].bit, ps);
+                RECT lr = { x + 24, footer.top, x + tips[ti].w, footer.bottom };
+                text(dc, font_small, tips[ti].label, lr, theme->muted, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+                x += tips[ti].w + 4;
+            }
+        }
+        if (message && message[0] && footer.right - x > 90) {
+            RECT hint = { x + 6, footer.top, footer.right - 12, footer.bottom };
+            text(dc, font_small, message, hint, theme->accent, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        }
+        return;
+    }
     controller_artwork_draw(dc, x, icon_y, icon_sz, icon_sz, 0, ps);
     RECT nav_r = { x + 26, footer.top, x + 76, footer.bottom };
     text(dc, font_small, L"Nav", nav_r, theme->muted, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
@@ -2169,14 +2198,7 @@ static void draw_menu(HDC dc, RECT r) {
         static const wchar_t *category_values[]={L"Theme & size",L"Input",L"Startup",L"Files",L"Graphics",L"Parsectagon",L"Return"};
         int section=state.page==PAGE_SETTINGS_HOME?0:state.page==PAGE_APPEARANCE?1:state.page==PAGE_CONTROLS?2:state.page==PAGE_GAME_SETTINGS?3:state.page==PAGE_TOOLS?4:5;
         const wchar_t *page_title=state.page==PAGE_SETTINGS?L"All settings":state.page==PAGE_THEME?L"Theme":state.page==PAGE_KEYBINDS?L"Keybinds":state.page==PAGE_BINDING?binding_names[state.binding_action]:state.page==PAGE_GAME_ICONS?L"Game input icons":state.page==PAGE_STARTUP?L"Startup screens":state.page==PAGE_PERFORMANCE?L"Performance":state.page==PAGE_CHEATS?L"Cheats":state.page==PAGE_BACKUPS?L"Savegame backups":state.page==PAGE_PHOTO?L"Photo Mode":state.page==PAGE_PHOTO_CONTROLS?L"Photo controls":state.page==PAGE_PHOTO_EFFECTS?L"Filters & effects":state.page==PAGE_PHOTO_WATERMARK?L"Photo watermark":state.page==PAGE_FAVORITE_SEARCH?(state.fav_search_mode?L"Search features":L"Favorites & search"):titles[section];
-        wchar_t fav_tip[128]={0};
-        if(state.page==PAGE_FAVORITE_SEARCH){
-            const wchar_t *del_btn=ps==OVERLAY_ICONS_PLAYSTATION?L"Square":L"X";
-            const wchar_t *sp_btn=ps==OVERLAY_ICONS_PLAYSTATION?L"Triangle":L"Y";
-            const wchar_t *clr_btn=ps==OVERLAY_ICONS_PLAYSTATION?L"L1/R1":L"LB/RB";
-            swprintf(fav_tip,128,L"A: Enter letter / %ls  •  %ls: Backspace  •  %ls: Space  •  %ls: Clear",state.fav_search_mode?L"Open":L"Pin",del_btn,sp_btn,clr_btn);
-        }
-        const wchar_t *page_description=state.page==PAGE_SETTINGS?L"Browse all overlay and system options":state.page==PAGE_THEME?L"Choose a color preset":state.page==PAGE_KEYBINDS?L"Assign keyboard keys and controller combinations":state.page==PAGE_BINDING?L"Record or clear an input":state.page==PAGE_GAME_ICONS?L"Choose prompts and edit game mappings":state.page==PAGE_STARTUP?L"Manage title and network bypass":state.page==PAGE_PERFORMANCE?L"PORTHEON graphics options; restart to apply":state.page==PAGE_CHEATS?L"Fight and career options for Player 1":state.page==PAGE_BACKUPS?L"Save in UFC 6 before backing up":state.page==PAGE_PHOTO?L"Camera, freeze and capture controls":state.page==PAGE_PHOTO_CONTROLS?L"Close the overlay to control the camera":state.page==PAGE_PHOTO_EFFECTS?L"Adjust effects while Photo Mode is active":state.page==PAGE_PHOTO_WATERMARK?L"Style the name used in screenshots":state.page==PAGE_FAVORITE_SEARCH?fav_tip:descriptions[section];
+        const wchar_t *page_description=state.page==PAGE_SETTINGS?L"Browse all overlay and system options":state.page==PAGE_THEME?L"Choose a color preset":state.page==PAGE_KEYBINDS?L"Assign keyboard keys and controller combinations":state.page==PAGE_BINDING?L"Record or clear an input":state.page==PAGE_GAME_ICONS?L"Choose prompts and edit game mappings":state.page==PAGE_STARTUP?L"Manage title and network bypass":state.page==PAGE_PERFORMANCE?L"PORTHEON graphics options; restart to apply":state.page==PAGE_CHEATS?L"Fight and career options for Player 1":state.page==PAGE_BACKUPS?L"Save in UFC 6 before backing up":state.page==PAGE_PHOTO?L"Camera, freeze and capture controls":state.page==PAGE_PHOTO_CONTROLS?L"Close the overlay to control the camera":state.page==PAGE_PHOTO_EFFECTS?L"Adjust effects while Photo Mode is active":state.page==PAGE_PHOTO_WATERMARK?L"Style the name used in screenshots":state.page==PAGE_FAVORITE_SEARCH?(state.fav_search_mode?L"Spin carousel with Left/Right, A enters or opens":L"Spin carousel with Left/Right, A enters or pins"):descriptions[section];
         int fav_ids[FAV_CATALOG_COUNT];
         int fav_match_count=state.page==PAGE_FAVORITE_SEARCH?fav_filter_items(state.fav_search_category,state.fav_search_query,fav_ids,FAV_CATALOG_COUNT):0;
         RECT panel={24,16,r.right-24,r.bottom-16};
