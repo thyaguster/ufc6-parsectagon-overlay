@@ -14,7 +14,7 @@ namespace UFC6OverlaySetup {
   public bool InstallerOpened {get;private set;}
   public UpdateForm(string installed,string folder,bool automatic=true){
    this.installed=installed;this.folder=folder;
-   Text="UFC 6 Actions Overlay Updates";ClientSize=new Size(680,470);
+   Text="UFC 6 Parsectagon Overlay Updates";ClientSize=new Size(680,470);
    var title=ModernUi.Label("Overlay updates",110,70,530,40,22,true);
    var current=ModernUi.Label("Installed version  v"+installed,112,116,530,24,10,false,true);
    var info=new ModernCard {Bounds=new Rectangle(28,164,624,172)};
@@ -41,7 +41,7 @@ namespace UFC6OverlaySetup {
   }
   void Download(){
    if(release==null||!release.IsNewer)return;check.Enabled=download.Enabled=false;status.Text="Downloading and verifying v"+release.Version+"...";
-   var worker=new BackgroundWorker();worker.DoWork+=delegate(object sender,DoWorkEventArgs e){e.Result=UpdateClient.Download(release,Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"UFC6 Actions Overlay","Updates"));};
+   var worker=new BackgroundWorker();worker.DoWork+=delegate(object sender,DoWorkEventArgs e){e.Result=UpdateClient.Download(release,Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"UFC 6 Parsectagon Overlay","Updates"));};
    worker.RunWorkerCompleted+=delegate(object sender,RunWorkerCompletedEventArgs e){
     if(IsDisposed){worker.Dispose();return;}check.Enabled=true;download.Enabled=true;
     if(e.Error!=null)status.Text="Update download failed: "+e.Error.Message+"\r\nThe installer was not opened.";

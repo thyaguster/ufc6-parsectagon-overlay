@@ -4,7 +4,7 @@ Set-Location -LiteralPath $PSScriptRoot
 & (Join-Path $PSScriptRoot 'build.ps1') -NoLobby:$NoLobby
 $version = (Get-Content -LiteralPath 'dist\release.json' -Raw | ConvertFrom-Json).version
 & (Join-Path $PSScriptRoot 'build-setup.ps1')
-$package = Join-Path $PSScriptRoot "release\UFC6-Actions-Overlay-$version"
+$package = Join-Path $PSScriptRoot "release\UFC6-Parsectagon-Overlay-$version"
 $releaseRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot 'release')).TrimEnd('\') + '\'
 $packagePath = [IO.Path]::GetFullPath($package)
 if (-not $packagePath.StartsWith($releaseRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Package path is outside release directory.' }
@@ -26,7 +26,7 @@ if (Test-Path -LiteralPath 'scripts') {
     }
 }
 if (Test-Path -LiteralPath '.github') { Copy-Item -LiteralPath '.github' -Destination $package -Recurse -Force }
-Copy-Item -LiteralPath 'dist\UFC6ActionsOverlaySetup.exe' -Destination (Join-Path $package 'UFC6ActionsOverlaySetup.exe')
+Copy-Item -LiteralPath 'dist\UFC6ParsectagonOverlaySetup.exe' -Destination (Join-Path $package 'UFC6ParsectagonOverlaySetup.exe')
 New-Item -ItemType Directory -Force -Path "$package\tests" | Out-Null
 Get-ChildItem -LiteralPath 'tests' -File | ForEach-Object {
     if ($_.Name -ne 'fight_stats_probe_test.py') { Copy-Item -LiteralPath $_.FullName -Destination "$package\tests" }
@@ -46,6 +46,6 @@ Get-ChildItem -LiteralPath $package -Directory -Recurse -Filter '__pycache__' | 
     if (-not $cachePath.StartsWith($packageRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Cache path is outside the release package.' }
     Remove-Item -LiteralPath $cachePath -Recurse -Force
 }
-$archive = Join-Path $PSScriptRoot "release\UFC6-Actions-Overlay-$version.zip"
+$archive = Join-Path $PSScriptRoot "release\UFC6-Parsectagon-Overlay-$version.zip"
 Compress-Archive -LiteralPath $package -DestinationPath $archive -Force
 Get-Item -LiteralPath $archive | Select-Object FullName,Length | Format-List

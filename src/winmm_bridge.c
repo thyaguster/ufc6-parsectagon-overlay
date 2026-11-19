@@ -40,6 +40,36 @@ MMRESULT WINAPI ProxyTimeEndPeriod(UINT period) {
     return fn?fn(period):TIMERR_NOCANDO;
 }
 
+MMRESULT WINAPI ProxyTimeGetDevCaps(LPTIMECAPS caps,UINT bytes) {
+    typedef MMRESULT (WINAPI *Fn)(LPTIMECAPS,UINT);
+    Fn fn=(Fn)system_proc("timeGetDevCaps");
+    return fn?fn(caps,bytes):TIMERR_NOCANDO;
+}
+
+DWORD WINAPI ProxyTimeGetTime(void) {
+    typedef DWORD (WINAPI *Fn)(void);
+    Fn fn=(Fn)system_proc("timeGetTime");
+    return fn?fn():0;
+}
+
+MMRESULT WINAPI ProxyTimeGetSystemTime(LPMMTIME time,UINT bytes) {
+    typedef MMRESULT (WINAPI *Fn)(LPMMTIME,UINT);
+    Fn fn=(Fn)system_proc("timeGetSystemTime");
+    return fn?fn(time,bytes):TIMERR_NOCANDO;
+}
+
+MMRESULT WINAPI ProxyTimeSetEvent(UINT delay,UINT resolution,LPTIMECALLBACK callback,DWORD_PTR user,UINT flags) {
+    typedef MMRESULT (WINAPI *Fn)(UINT,UINT,LPTIMECALLBACK,DWORD_PTR,UINT);
+    Fn fn=(Fn)system_proc("timeSetEvent");
+    return fn?fn(delay,resolution,callback,user,flags):0;
+}
+
+MMRESULT WINAPI ProxyTimeKillEvent(UINT timer) {
+    typedef MMRESULT (WINAPI *Fn)(UINT);
+    Fn fn=(Fn)system_proc("timeKillEvent");
+    return fn?fn(timer):TIMERR_NOCANDO;
+}
+
 BOOL WINAPI DllMain(HINSTANCE module,DWORD reason,LPVOID reserved) {
     (void)reserved;
     if(reason==DLL_PROCESS_ATTACH){DisableThreadLibraryCalls(module);overlay_bootstrap(module);}

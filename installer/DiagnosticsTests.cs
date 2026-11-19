@@ -15,7 +15,7 @@ namespace UFC6OverlaySetup {
     string one=Diagnostics.Export(game,destination,"test","inactive",123),two=Diagnostics.Export(bin,destination,"test");
     Require(one!=two&&File.Exists(one)&&File.Exists(two),"Repeated reports must keep older archives.");
     using(var zip=ZipFile.OpenRead(one)){
-     Require(zip.Entries.Count==4,"Report must contain only its manifest, README and two allowlisted logs.");
+     Require(zip.Entries.Count==4&&zip.GetEntry("logs/bin/ufc6-quit-menu.log")!=null,"Report must contain only its manifest, README and the bin logs when novo is absent.");
      string all="";foreach(var e in zip.Entries)using(var reader=new StreamReader(e.Open()))all+=reader.ReadToEnd();
      Require(!all.Contains("PrivateName")&&!all.Contains("secret-save")&&!all.Contains("private-launch-argument")&&!all.Contains("private-game-content"),"Report must exclude private paths, save contents and launch arguments.");
      Require(all.Contains("inactive")&&all.Contains("controllerHooks")&&all.Contains("Log is missing.")&&all.Contains("sha256"),"Report must explain runtime, hashes and missing log state.");
@@ -24,12 +24,24 @@ namespace UFC6OverlaySetup {
     }
     File.WriteAllText(Path.Combine(bin,"ufc6-quit-menu-vulkan.log"),new string('x',600*1024)+"\nMenu drawn directly into a presented game frame.\n");
     string bounded=Diagnostics.Export(bin,destination,"test","active");
-    using(var zip=ZipFile.OpenRead(bounded))Require(zip.GetEntry("logs/ufc6-quit-menu-vulkan.log").Length<513*1024,"Diagnostic logs must be bounded.");
+    using(var zip=ZipFile.OpenRead(bounded))Require(zip.GetEntry("logs/bin/ufc6-quit-menu-vulkan.log").Length<513*1024,"Diagnostic logs must be bounded.");
+    string novo=Path.Combine(game,"novo");Directory.CreateDirectory(novo);
+    File.WriteAllText(Path.Combine(novo,"UFC 6 novo.exe"),"fixture pro engine");
+    File.WriteAllText(Path.Combine(novo,"ufc6-quit-menu.log"),"PS5 Pro overlay log marker");
+    File.WriteAllText(Path.Combine(novo,"ufc6-quit-menu-vulkan.log"),"PS5 Pro Vulkan log marker");
+    string both=Diagnostics.Export(novo,destination,"test");
+    using(var zip=ZipFile.OpenRead(both)){
+     Require(zip.Entries.Count==6,"A report with both engines must include both pairs of bounded logs.");
+     Require(zip.GetEntry("logs/bin/ufc6-quit-menu.log")!=null&&zip.GetEntry("logs/novo/ufc6-quit-menu.log")!=null,"Both engines need distinct log paths.");
+     using(var reader=new StreamReader(zip.GetEntry("report.json").Open())){string json=reader.ReadToEnd();Require(json.Contains("\"engine\":\"bin\"")&&json.Contains("\"engine\":\"novo\"")&&json.Contains("\"missingEngines\":[]"),"Both engine snapshots must be present regardless of selected folder.");}
+    }
+    bool rootRejected=false;try{Diagnostics.Export(bin,game,"test");}catch(IOException){rootRejected=true;}
+    Require(rootRejected,"Reports must not be written at the game root.");
     bool rejected=false;try{Diagnostics.Export(bin,Path.Combine(bin,"_SaveData","reports"),"test");}catch(IOException){rejected=true;}
     Require(rejected&&!Directory.Exists(Path.Combine(bin,"_SaveData","reports")),"Reports must not be written inside game or save folders.");
     Require(!Directory.GetFiles(destination,"*.partial").Any(),"Completed reports must leave no partial file.");
     Require(Diagnostics.Redact(@"failure at \\PrivateServer\PrivateShare\file").Contains("[network path]"),"Network paths must be redacted.");
-    return "PASS: diagnostics allowlist, path redaction, missing logs/components, bounded logs, distinct verified archives, save/argument exclusion and game-folder write rejection.";
+    return "PASS: both-engine diagnostics, distinct bounded logs, allowlist, path redaction, missing logs/components, distinct verified archives, save/argument exclusion and game-folder write rejection.";
    }finally{if(!Path.GetFullPath(root).StartsWith(Path.GetFullPath(Path.GetTempPath()),StringComparison.OrdinalIgnoreCase))throw new IOException("Unsafe fixture path.");Directory.Delete(root,true);}
   }
  }

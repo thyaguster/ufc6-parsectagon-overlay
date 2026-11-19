@@ -200,6 +200,30 @@ static int allocate_capture(Device *d,Swap *s,Capture *capture) {
 }
 #include "photo_blend.h"
 #include "photo_effects_gpu.h"
+
+/* The Pro engine can present A2B10G10R10 images. Vulkan copies use the
+   swapchain's packed layout, while the menu and capture callbacks use BGRA8. */
+static void pack_a2b10g10r10(void *pixels,size_t count){
+    unsigned char *bytes=pixels;
+    for(size_t i=0;i<count;++i){
+        const unsigned char *p=bytes+i*4;
+        uint32_t value=((uint32_t)(p[3]*3u+127u)/255u<<30)|
+            ((uint32_t)(p[0]*1023u+127u)/255u<<20)|
+            ((uint32_t)(p[1]*1023u+127u)/255u<<10)|
+            (uint32_t)(p[2]*1023u+127u)/255u;
+        memcpy(bytes+i*4,&value,4);
+    }
+}
+static void unpack_a2b10g10r10(void *pixels,size_t count){
+    unsigned char *bytes=pixels;
+    for(size_t i=0;i<count;++i){
+        uint32_t value;memcpy(&value,bytes+i*4,4);
+        bytes[i*4]=(unsigned char)((((value>>20)&1023u)*255u+511u)/1023u);
+        bytes[i*4+1]=(unsigned char)((((value>>10)&1023u)*255u+511u)/1023u);
+        bytes[i*4+2]=(unsigned char)(((value&1023u)*255u+511u)/1023u);
+        bytes[i*4+3]=(unsigned char)(((value>>30)&3u)*85u);
+    }
+}
 static void cleanup_swap(Device *d,Swap *s) {
     cleanup_effects(d,s);
     cleanup_blend(d,s);
@@ -336,7 +360,11 @@ static VkResult VKAPI_CALL menu_present(VkQueue queue,const VkPresentInfoKHR *in
     if(draw&&!blend&&(s->format==VK_FORMAT_R8G8B8A8_UNORM||s->format==VK_FORMAT_R8G8B8A8_SRGB)){
         unsigned char *p=f->pixels;for(size_t i=0;i<menu_bytes;i+=4){unsigned char b=p[i];p[i]=p[i+2];p[i+2]=b;}
     }
+    if(draw&&!blend&&s->format==VK_FORMAT_A2B10G10R10_UNORM_PACK32)
+        pack_a2b10g10r10(f->pixels,(size_t)menu_width*menu_height);
     if(draw)memcpy(f->mapped,f->pixels,(SIZE_T)upload_bytes);
+    if(draw&&!blend&&s->format==VK_FORMAT_A2B10G10R10_UNORM_PACK32)
+        unpack_a2b10g10r10(f->pixels,(size_t)menu_width*menu_height);
     if(draw&&!f->coherent){VkMappedMemoryRange range={.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
         .memory=f->memory,.size=VK_WHOLE_SIZE};d->FlushMappedMemoryRanges(d->device,1,&range);}
     d->ResetCommandBuffer(f->command,0);
@@ -400,6 +428,7 @@ static VkResult VKAPI_CALL menu_present(VkQueue queue,const VkPresentInfoKHR *in
     if(tab_probe){
         if(d->WaitForFences(d->device,1,&f->fence,VK_TRUE,UINT64_MAX)==VK_SUCCESS){
             if(!tab_shot.coherent){VkMappedMemoryRange range={.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=tab_shot.memory,.size=VK_WHOLE_SIZE};d->InvalidateMappedMemoryRanges(d->device,1,&range);}
+            if(s->format==VK_FORMAT_A2B10G10R10_UNORM_PACK32)unpack_a2b10g10r10(tab_shot.mapped,7);
             int rgba=s->format==VK_FORMAT_R8G8B8A8_UNORM||s->format==VK_FORMAT_R8G8B8A8_SRGB;
             online_tab_frame(tab_shot.mapped,rgba);
         }
@@ -424,6 +453,13 @@ static VkResult VKAPI_CALL menu_present(VkQueue queue,const VkPresentInfoKHR *in
         if(d->WaitForFences(d->device,1,&f->fence,VK_TRUE,UINT64_MAX)==VK_SUCCESS){
             if(!shot.coherent){VkMappedMemoryRange range={.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=shot.memory,.size=VK_WHOLE_SIZE};
                 d->InvalidateMappedMemoryRanges(d->device,1,&range);}
+            if(s->format==VK_FORMAT_A2B10G10R10_UNORM_PACK32){
+                unpack_a2b10g10r10(shot.mapped,(size_t)s->extent.width*s->extent.height);
+                if(raw_probe.mapped){
+                    if(!raw_probe.coherent){VkMappedMemoryRange range={.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=raw_probe.memory,.size=VK_WHOLE_SIZE};d->InvalidateMappedMemoryRanges(d->device,1,&range);}
+                    unpack_a2b10g10r10(raw_probe.mapped,(size_t)s->extent.width*s->extent.height);
+                }
+            }
             int rgba=s->format==VK_FORMAT_R8G8B8A8_UNORM||s->format==VK_FORMAT_R8G8B8A8_SRGB;
             if(probe){
                 if(raw_probe.mapped&&!raw_probe.coherent){VkMappedMemoryRange range={.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=raw_probe.memory,.size=VK_WHOLE_SIZE};d->InvalidateMappedMemoryRanges(d->device,1,&range);}
@@ -453,10 +489,11 @@ static VkResult VKAPI_CALL menu_create_swap(VkDevice device,const VkSwapchainCre
     Device *d=device_for(device);if(!d)return VK_ERROR_INITIALIZATION_FAILED;
     VkSwapchainCreateInfoKHR create=*info;
     VkSurfaceCapabilitiesKHR caps;
-    if(d->surface_caps&&d->surface_caps(d->physical,info->surface,&caps)==VK_SUCCESS&&
-        (caps.supportedUsageFlags&VK_IMAGE_USAGE_TRANSFER_SRC_BIT)&&!(info->flags&VK_SWAPCHAIN_CREATE_PROTECTED_BIT_KHR))
+    int have_caps=d->surface_caps&&d->surface_caps(d->physical,info->surface,&caps)==VK_SUCCESS;
+    if(have_caps&&(caps.supportedUsageFlags&VK_IMAGE_USAGE_TRANSFER_SRC_BIT)&&!(info->flags&VK_SWAPCHAIN_CREATE_PROTECTED_BIT_KHR))
         create.imageUsage|=VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-    if(d->surface_caps&&d->surface_caps(d->physical,info->surface,&caps)==VK_SUCCESS&&(caps.supportedUsageFlags&VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))create.imageUsage|=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    if(have_caps&&(caps.supportedUsageFlags&VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))create.imageUsage|=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    if(have_caps&&(caps.supportedUsageFlags&VK_IMAGE_USAGE_TRANSFER_DST_BIT)&&!(info->flags&VK_SWAPCHAIN_CREATE_PROTECTED_BIT_KHR))create.imageUsage|=VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     VkResult result=d->CreateSwapchainKHR(device,&create,alloc,out);if(result!=VK_SUCCESS)return result;
     AcquireSRWLockExclusive(&guard);
     for(int i=0;i<MAX_SWAPS;++i)if(!d->swaps[i].swap){
@@ -464,14 +501,17 @@ static VkResult VKAPI_CALL menu_create_swap(VkDevice device,const VkSwapchainCre
         uint32_t count=0;d->GetSwapchainImagesKHR(device,*out,&count,NULL);
         if(count>0&&count<=MAX_IMAGES){s->count=count;d->GetSwapchainImagesKHR(device,*out,&s->count,s->images);}
         s->supported=s->count&&s->extent.width>=320&&s->extent.height>=240&&
-            (info->imageUsage&VK_IMAGE_USAGE_TRANSFER_DST_BIT)&&info->imageArrayLayers==1&&
+            (create.imageUsage&VK_IMAGE_USAGE_TRANSFER_DST_BIT)&&info->imageArrayLayers==1&&
             (s->format==VK_FORMAT_B8G8R8A8_UNORM||s->format==VK_FORMAT_B8G8R8A8_SRGB||
-             s->format==VK_FORMAT_R8G8B8A8_UNORM||s->format==VK_FORMAT_R8G8B8A8_SRGB);
+             s->format==VK_FORMAT_R8G8B8A8_UNORM||s->format==VK_FORMAT_R8G8B8A8_SRGB||
+             s->format==VK_FORMAT_A2B10G10R10_UNORM_PACK32);
         bind_menu();if(s->supported&&mark_active)mark_active();
         s->blend_supported=(create.imageUsage&VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)!=0;
         s->capture_supported=s->supported&&(create.imageUsage&VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
         if(screenshot_capability)screenshot_capability(s->capture_supported);
-        log_line(s->supported?"Supported game swapchain captured.":"Unsupported swapchain format/usage for menu.");break;
+        if(s->supported)log_line("Supported game swapchain captured.");
+        else {char line[200];snprintf(line,sizeof(line),"Unsupported swapchain: format=%u usage=%u requested=%u caps=%u images=%u size=%ux%u layers=%u.",(unsigned)s->format,(unsigned)create.imageUsage,(unsigned)info->imageUsage,have_caps?(unsigned)caps.supportedUsageFlags:0u,s->count,s->extent.width,s->extent.height,info->imageArrayLayers);log_line(line);}
+        break;
     }
     ReleaseSRWLockExclusive(&guard);return result;
 }

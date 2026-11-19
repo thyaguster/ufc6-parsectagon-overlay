@@ -96,7 +96,7 @@ static class CareerCodeCheck {
   try {
    if(args.Length==2&&args[0]=="--self-test"){SelfTest(args[1]);return 0;}
    if(args.Length!=0&&!quiet)throw new ArgumentException("Usage: run with no arguments, or --out report.txt");
-   string folder=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),"UFC6 Actions Overlay","SupportReports");
+   string folder=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),"UFC 6 Parsectagon Overlay","SupportReports");
    if(!quiet)Directory.CreateDirectory(folder);
    string report=quiet?Path.GetFullPath(args[1]):Path.Combine(folder,"UFC6-career-code-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+"-"+Guid.NewGuid().ToString("N").Substring(0,8)+".txt");
    File.WriteAllText(report,Inspect(),new UTF8Encoding(false));

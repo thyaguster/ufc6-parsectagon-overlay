@@ -1,4 +1,4 @@
-// UFC 6 wordmark icon with outlined lettering. Run with --output <assets folder> after compilation.
+// Parsectagon P emblem from src/assets/parsectagon-ufc-6.svg.
 using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -25,19 +25,20 @@ class MakeIcon {
   string folder=args[1];Directory.CreateDirectory(folder);int[] sizes={16,24,32,48,64,128,256};var images=new byte[sizes.Length][];
   using(var master=new Bitmap(1024,1024,PixelFormat.Format32bppArgb)){
    using(var g=Graphics.FromImage(master)){
-    g.SmoothingMode=SmoothingMode.AntiAlias;g.ScaleTransform(4,4);g.Clear(Color.Transparent);
-    using(var p=Rounded(5,5,246,246,55))using(var b=new SolidBrush(Color.FromArgb(17,22,30)))g.FillPath(b,p);
-    using(var p=Rounded(14,14,228,228,47))using(var pen=new Pen(Color.FromArgb(52,68,81),4))g.DrawPath(pen,p);
-    using(var family=new FontFamily("Segoe UI")){
-     using(var word=FitText("UFC",family,FontStyle.Bold|FontStyle.Italic,new RectangleF(28,40,200,63)))
-     using(var number=FitText("6",family,FontStyle.Bold|FontStyle.Italic,new RectangleF(83,116,96,105)))
-     using(var white=new SolidBrush(Color.FromArgb(246,248,250)))
-     using(var red=new SolidBrush(Color.FromArgb(236,36,55))){
-      g.FillPath(white,word);g.FillPath(red,number);
-      string svg="<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 256 256\"><rect x=\"5\" y=\"5\" width=\"246\" height=\"246\" rx=\"55\" fill=\"#11161e\"/><rect x=\"14\" y=\"14\" width=\"228\" height=\"228\" rx=\"47\" fill=\"none\" stroke=\"#344451\" stroke-width=\"4\"/><path fill=\"#f6f8fa\" d=\""+Svg(word)+"\"/><path fill=\"#ec2437\" d=\""+Svg(number)+"\"/></svg>";
-      File.WriteAllText(Path.Combine(folder,"overlay.svg"),svg+Environment.NewLine);
+    g.SmoothingMode=SmoothingMode.AntiAlias;g.Clear(Color.Transparent);
+    g.TranslateTransform(0,0);g.ScaleTransform(1024f/96f,1024f/96f);
+    PointF[] outer={new PointF(29,5),new PointF(67,5),new PointF(91,29),new PointF(91,67),new PointF(67,91),new PointF(29,91),new PointF(5,67),new PointF(5,29)};
+    PointF[] inner={new PointF(31,13),new PointF(65,13),new PointF(83,31),new PointF(83,65),new PointF(65,83),new PointF(31,83),new PointF(13,65),new PointF(13,31)};
+    using(var dark=new SolidBrush(Color.FromArgb(19,21,26)))using(var red=new Pen(Color.FromArgb(230,74,80),5))using(var pale=new Pen(Color.FromArgb(56,255,255,255),2))using(var white=new SolidBrush(Color.FromArgb(244,244,246))){
+     g.FillPolygon(dark,outer);g.DrawPolygon(red,outer);g.DrawPolygon(pale,inner);
+     using(var p=new GraphicsPath(FillMode.Alternate)){
+      p.StartFigure();p.AddLine(27,23,56,23);p.AddBezier(56,23,71,23,79,31,79,44);p.AddBezier(79,44,79,57,71,65,56,65);p.AddLine(56,65,43,65);p.AddLine(43,65,43,78);p.AddLine(43,78,27,78);p.CloseFigure();
+      p.StartFigure();p.AddLine(43,37,55,37);p.AddBezier(55,37,60,37,63,39,63,44);p.AddBezier(63,44,63,49,60,52,55,52);p.AddLine(55,52,43,52);p.CloseFigure();
+      g.FillPath(white,p);
      }
+     g.DrawLine(red,16,72,29,85);
     }
+    File.WriteAllText(Path.Combine(folder,"overlay.svg"),"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 96 96\"><path d=\"M29 5H67L91 29V67L67 91H29L5 67V29Z\" fill=\"#13151a\" stroke=\"#e64a50\" stroke-width=\"5\"/><path d=\"M31 13H65L83 31V65L65 83H31L13 65V31Z\" fill=\"none\" stroke=\"#ffffff\" stroke-opacity=\".22\" stroke-width=\"2\"/><path fill=\"#f4f4f6\" fill-rule=\"evenodd\" d=\"M27 23h29c15 0 23 8 23 21S71 65 56 65H43v13H27V23Zm16 14v15h12c5 0 8-3 8-8s-3-7-8-7H43Z\"/><path d=\"M16 72 29 85\" stroke=\"#e64a50\" stroke-width=\"4\"/></svg>"+Environment.NewLine);
    }
    for(int i=0;i<sizes.Length;i++)using(var frame=new Bitmap(sizes[i],sizes[i],PixelFormat.Format32bppArgb)){
     using(var g=Graphics.FromImage(frame)){g.InterpolationMode=InterpolationMode.HighQualityBicubic;g.PixelOffsetMode=PixelOffsetMode.HighQuality;g.DrawImage(master,new Rectangle(0,0,sizes[i],sizes[i]));}

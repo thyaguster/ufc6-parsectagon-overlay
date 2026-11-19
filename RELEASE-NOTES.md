@@ -1,3 +1,19 @@
+## v0.9.85 — Documents folder branding
+
+- Save support reports, save backups, and fight reports under `Documents/UFC 6 Parsectagon Overlay`, and use the same name for the update download cache. Existing files stay in their old folders; the overlay still reads older fight reports when the new folder has none.
+
+## v0.9.84 — 10-bit Pro menu rendering
+
+- Draw the overlay on the Pro engine's A2B10G10R10 swapchain and convert its screenshot and Online-tab samples to the menu's 8-bit format. The reported swapchain had been rejected before any frame could be drawn; this build still needs an in-game retest.
+
+## v0.9.83 — combined setup and engine compatibility
+
+- Remove the redundant Switch Engine button. One Install / Update action targets both `bin` and `novo` when present. Both folders are checked before either is changed, so an unsupported or conflicting sibling blocks the action.
+- Export one support ZIP with separate component checks, process snapshots, Vulkan loader evidence, and bounded logs for both engine folders.
+- Add the multimedia timer exports requested by some AMD Vulkan drivers, including `timeGetDevCaps`, to the PS5 Pro `winmm.dll` bridge. The forwarded call was checked against Windows' system library; the affected driver still needs an in-game retest.
+- Request transfer-destination usage when the swapchain supports it, and validate the usage actually created. This addresses the reported normal-mode no-UI path; the affected setup still needs an in-game retest.
+- Brand the setup EXE, installer window, icon, and Windows metadata as **UFC 6 Parsectagon Overlay**. The updater now checks this repository and its branded release asset.
+
 ## v0.9.80 — Local stable package
 
 - Package the current overlay and dual-engine installer as a local stable build. This release is not uploaded.

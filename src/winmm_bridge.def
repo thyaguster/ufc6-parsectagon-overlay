@@ -2,3 +2,8 @@ LIBRARY WINMM
 EXPORTS
     timeBeginPeriod=ProxyTimeBeginPeriod
     timeEndPeriod=ProxyTimeEndPeriod
+    timeGetDevCaps=ProxyTimeGetDevCaps
+    timeGetTime=ProxyTimeGetTime
+    timeGetSystemTime=ProxyTimeGetSystemTime
+    timeSetEvent=ProxyTimeSetEvent
+    timeKillEvent=ProxyTimeKillEvent

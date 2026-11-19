@@ -9,10 +9,10 @@ using System.Web.Script.Serialization;
 namespace UFC6OverlaySetup {
  public sealed class GithubAsset { public string name {get;set;} public string browser_download_url {get;set;} public long size {get;set;} public string digest {get;set;} }
  public sealed class GithubRelease { public string tag_name {get;set;} public bool draft {get;set;} public bool prerelease {get;set;} public GithubAsset[] assets {get;set;} }
- public sealed class OverlayUpdate { public string Tag,Version,InstallerName,InstallerUrl,ChecksumsUrl,Digest; public long Size; public bool IsNewer; public string Page { get {return "https://github.com/thyaguster/ufc6-actions-overlay/releases/tag/"+Tag;} } }
+ public sealed class OverlayUpdate { public string Tag,Version,InstallerName,InstallerUrl,ChecksumsUrl,Digest; public long Size; public bool IsNewer; public string Page { get {return "https://github.com/thyaguster/ufc6-parsectagon-overlay/releases/tag/"+Tag;} } }
  public static class UpdateClient {
-  public const string LatestApi="https://api.github.com/repos/thyaguster/ufc6-actions-overlay/releases/latest";
-  public const string LatestPage="https://github.com/thyaguster/ufc6-actions-overlay/releases/latest";
+  public const string LatestApi="https://api.github.com/repos/thyaguster/ufc6-parsectagon-overlay/releases/latest";
+  public const string LatestPage="https://github.com/thyaguster/ufc6-parsectagon-overlay/releases/latest";
   const long MaxInstaller=128L*1024*1024;
   public static Version ParseVersion(string value){
    if(value==null||!Regex.IsMatch(value,@"^v?\d{1,5}\.\d{1,5}\.\d{1,5}$"))throw new InvalidDataException("Unrecognized release version.");
@@ -22,8 +22,8 @@ namespace UFC6OverlaySetup {
    var release=new JavaScriptSerializer {MaxJsonLength=4*1024*1024}.Deserialize<GithubRelease>(json);
    if(release==null||release.draft||release.prerelease||release.assets==null)throw new InvalidDataException("No supported stable release was returned by GitHub.");
    Version version=ParseVersion(release.tag_name);var result=new OverlayUpdate {Tag=release.tag_name,Version=version.ToString(3),IsNewer=version>ParseVersion(installed)};
-   result.InstallerName="UFC6-Actions-Overlay-Setup-"+result.Version+".exe";
-   string prefix="https://github.com/thyaguster/ufc6-actions-overlay/releases/download/"+result.Tag+"/";
+   result.InstallerName=(version>=new Version(0,9,83)?"UFC6-Parsectagon-Overlay-Setup-":"UFC6-Actions-Overlay-Setup-")+result.Version+".exe";
+   string prefix="https://github.com/thyaguster/ufc6-parsectagon-overlay/releases/download/"+result.Tag+"/";
    int installers=0,checksums=0;
    foreach(var asset in release.assets){
     if(asset==null)continue;
@@ -60,7 +60,7 @@ namespace UFC6OverlaySetup {
    var uri=new Uri(url);
    for(int redirect=0;redirect<6;redirect++){
     if(!Allowed(uri))throw new InvalidDataException("The download redirected outside GitHub.");
-    var request=(HttpWebRequest)WebRequest.Create(uri);request.AllowAutoRedirect=false;request.Timeout=15000;request.ReadWriteTimeout=30000;request.UserAgent="UFC6-Actions-Overlay-Updater";
+    var request=(HttpWebRequest)WebRequest.Create(uri);request.AllowAutoRedirect=false;request.Timeout=15000;request.ReadWriteTimeout=30000;request.UserAgent="UFC6-Parsectagon-Overlay-Updater";
     request.Accept="application/vnd.github+json";
     using(var response=(HttpWebResponse)request.GetResponse()){
      int status=(int)response.StatusCode;

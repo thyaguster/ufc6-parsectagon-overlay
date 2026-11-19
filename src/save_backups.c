@@ -26,8 +26,8 @@ void save_backups_init(HMODULE module){
     swprintf(source,1200,L"%ls\\_SaveData",cwd);
     PWSTR documents=NULL;
     if(FAILED(SHGetKnownFolderPath(&documents_id,0,NULL,&documents)))return;
-    if(wcslen(documents)+40>=1200){CoTaskMemFree(documents);return;}
-    swprintf(destination,1200,L"%ls\\UFC6 Actions Overlay\\SaveBackups",documents);CoTaskMemFree(documents);
+    if(wcslen(documents)+sizeof(L"\\UFC 6 Parsectagon Overlay\\SaveBackups")/sizeof(wchar_t)>=1200){CoTaskMemFree(documents);return;}
+    swprintf(destination,1200,L"%ls\\UFC 6 Parsectagon Overlay\\SaveBackups",documents);CoTaskMemFree(documents);
     update(BACKUP_READY,L"Ready to back up all UFC 6 save files.");
 }
 int save_backups_state(wchar_t *text,size_t count){AcquireSRWLockShared(&guard);int value=state;if(text&&count)lstrcpynW(text,message,(int)count);ReleaseSRWLockShared(&guard);return value;}

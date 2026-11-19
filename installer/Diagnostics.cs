@@ -21,6 +21,7 @@ namespace UFC6OverlaySetup {
   public static string Folder(string path){
    path=Path.GetFullPath(path);
    if(!File.Exists(Path.Combine(path,"UFC 6.exe"))&&File.Exists(Path.Combine(path,"bin","UFC 6.exe")))path=Path.Combine(path,"bin");
+   else if(!File.Exists(Path.Combine(path,"UFC 6.exe"))&&!File.Exists(Path.Combine(path,"UFC 6 novo.exe"))&&File.Exists(Path.Combine(path,"novo","UFC 6 novo.exe")))path=Path.Combine(path,"novo");
    if(!Directory.Exists(path)||Linked(path)||(!File.Exists(Path.Combine(path,"UFC 6.exe"))&&!File.Exists(Path.Combine(path,"UFC 6 novo.exe"))))throw new IOException("Choose PORTHEON's UFC6, bin, or novo game folder.");
    return path;
   }
@@ -91,20 +92,32 @@ namespace UFC6OverlaySetup {
   }
   public static string Export(string folder,string destination,string version,string renderer="unknown",int pid=0){
    folder=Folder(folder);destination=Path.GetFullPath(destination);
-   string gameRoot=Directory.GetParent(folder).FullName.TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
-   if(destination.Equals(folder,StringComparison.OrdinalIgnoreCase)||destination.StartsWith(gameRoot,StringComparison.OrdinalIgnoreCase))throw new IOException("Save support reports outside the game folder.");
+   string leaf=Path.GetFileName(folder),root=(leaf.Equals("bin",StringComparison.OrdinalIgnoreCase)||leaf.Equals("novo",StringComparison.OrdinalIgnoreCase))?Directory.GetParent(folder).FullName:folder;
+   string gameRoot=root.TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
+   if(destination.Equals(root,StringComparison.OrdinalIgnoreCase)||destination.StartsWith(gameRoot,StringComparison.OrdinalIgnoreCase))throw new IOException("Save support reports outside the game folder.");
    if(renderer!="active"&&renderer!="inactive"&&renderer!="unknown")throw new ArgumentException("Invalid renderer state.");
    Directory.CreateDirectory(destination);
    if(Linked(destination))throw new IOException("Choose a real support-report folder.");
-   var files=Files.Select(n=>FileInfo(folder,n)).ToList();
-   var logs=Logs.ToDictionary(n=>n,n=>Tail(folder,n));
-   string coreLog=logs[Logs[0]],vulkanLog=logs[Logs[1]];
+   var engines=new List<object>();var allLogs=new Dictionary<string,string>();var foundNames=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+   foreach(string name in new[]{"bin","novo"}){
+    string current=Path.Combine(root,name),exe=name=="bin"?"UFC 6.exe":"UFC 6 novo.exe";
+    if(!File.Exists(Path.Combine(current,exe)))continue;
+    if(Linked(current))throw new IOException("A game engine folder is linked. Report was not created.");
+    foundNames.Add(name);
+    var logs=Logs.ToDictionary(n=>n,n=>Tail(current,n));
+    foreach(var log in logs)allLogs.Add(name+"/"+log.Key,log.Value);
+    string coreLog=logs[Logs[0]],vulkanLog=logs[Logs[1]];
+    engines.Add(new{
+     engine=name,files=Files.Select(n=>FileInfo(current,n)).ToList(),processes=Processes(current,pid),vulkanLoaderEvidence=LoaderMessages(current),
+     logEvidence=new{note="Logs can contain previous sessions; runtime snapshot is from the export request.",coreLoaded=coreLog.Contains("loaded inside engine process"),controllerHooks=coreLog.Contains("Controller hooks installed"),layerAttached=vulkanLog.Contains("Vulkan menu layer attached"),swapchainReady=vulkanLog.Contains("Swapchain menu resources ready"),frameDrawn=vulkanLog.Contains("Menu drawn directly into")}
+    });
+   }
+   if(engines.Count==0)throw new IOException("No UFC 6 engine folders were found.");
    var report=new {
-    format=1,createdUtc=DateTime.UtcNow.ToString("o"),reporterVersion=version,windows=Environment.OSVersion.VersionString,is64BitOS=Environment.Is64BitOperatingSystem,
+    format=2,createdUtc=DateTime.UtcNow.ToString("o"),reporterVersion=version,windows=Environment.OSVersion.VersionString,is64BitOS=Environment.Is64BitOperatingSystem,
     runtimeSnapshot=new{rendererAtExport=renderer,requestedProcessId=pid},
-    files=files,processes=Processes(folder,pid),vulkanLoaderEvidence=LoaderMessages(folder),
-    logEvidence=new{note="Logs can contain previous sessions; runtime snapshot is from the export request.",coreLoaded=coreLog.Contains("loaded inside engine process"),controllerHooks=coreLog.Contains("Controller hooks installed"),layerAttached=vulkanLog.Contains("Vulkan menu layer attached"),swapchainReady=vulkanLog.Contains("Swapchain menu resources ready"),frameDrawn=vulkanLog.Contains("Menu drawn directly into")},
-    privacy="Only component fingerprints, selected runtime/module information two bounded overlay logs and filtered Vulkan-loader messages. Paths are redacted. No saves, screenshots, launcher arguments, account names or game content are collected."
+    engines=engines,missingEngines=new[]{"bin","novo"}.Where(name=>!foundNames.Contains(name)).ToArray(),
+    privacy="Only component fingerprints, selected runtime/module information, bounded overlay logs and filtered Vulkan-loader messages. Paths are redacted. No saves, screenshots, launcher arguments, account names or game content are collected."
    };
    string token=DateTime.UtcNow.ToString("yyyyMMdd-HHmmss")+"-"+Guid.NewGuid().ToString("N").Substring(0,8);
    string output=Path.Combine(destination,"UFC6-support-"+token+".zip"),temp=output+".partial";
@@ -112,13 +125,13 @@ namespace UFC6OverlaySetup {
     using(var file=new FileStream(temp,FileMode.CreateNew,FileAccess.ReadWrite,FileShare.None)){
      using(var archive=new ZipArchive(file,ZipArchiveMode.Create,true)){
       Write(archive,"report.json",new JavaScriptSerializer().Serialize(report));
-      Write(archive,"README.txt","UFC 6 Actions Overlay support report\r\nReview this ZIP before sharing it. No files were uploaded.\r\nLog evidence may include old sessions; compare timestamps/build lines with the runtime snapshot.\r\n");
-      foreach(var log in logs)Write(archive,"logs/"+log.Key,log.Value);
+      Write(archive,"README.txt","UFC 6 Parsectagon Overlay support report\r\nReview this ZIP before sharing it. No files were uploaded.\r\nLog evidence may include old sessions; compare timestamps/build lines with the runtime snapshot.\r\n");
+      foreach(var log in allLogs)Write(archive,"logs/"+log.Key,log.Value);
      }
      file.Flush(true);
     }
     using(var archive=ZipFile.OpenRead(temp)){
-     if(archive.Entries.Count!=4)throw new IOException("Support report verification failed.");
+     if(archive.Entries.Count!=2+allLogs.Count)throw new IOException("Support report verification failed.");
      foreach(var entry in archive.Entries)using(var stream=entry.Open()){byte[] buffer=new byte[8192];while(stream.Read(buffer,0,buffer.Length)>0){} }
     }
     File.Move(temp,output);return output;

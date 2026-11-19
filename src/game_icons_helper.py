@@ -275,7 +275,7 @@ def main():
                 # The proven v0.9.68 UI reads helper messages for every state
                 # except 2. Keep the filename and the missing-round warning
                 # visible without changing its native worker.
-                report(args.report, 3, 'Overall stats saved; round details unavailable. See Documents\\Parsectagon\\Fight Reports.',
+                report(args.report, 3, 'Overall stats saved; round details unavailable. See Documents\\UFC 6 Parsectagon Overlay\\Fight Reports.',
                        section='FightReport')
         elif args.edit_bindings:
             from input_gui import gui

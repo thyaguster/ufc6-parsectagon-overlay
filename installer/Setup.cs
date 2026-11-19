@@ -115,6 +115,7 @@ namespace UFC6OverlaySetup {
             folder = Path.GetFullPath(folder.Trim().Trim('"'));
             if (!Directory.Exists(folder)) throw new IOException("Choose PORTHEON\\games\\UFC6, its bin folder, or its novo folder.");
             if (!File.Exists(Path.Combine(folder,"UFC 6.exe")) && File.Exists(Path.Combine(folder,"bin","UFC 6.exe"))) folder = Path.Combine(folder,"bin");
+            else if (!File.Exists(Path.Combine(folder,"UFC 6.exe")) && !File.Exists(Path.Combine(folder,"UFC 6 novo.exe")) && File.Exists(Path.Combine(folder,"novo","UFC 6 novo.exe"))) folder = Path.Combine(folder,"novo");
             if (Linked(folder)) throw new IOException("Choose a real game folder, rather than a linked folder.");
             if (!File.Exists(Path.Combine(folder,"UFC 6.exe")) && !File.Exists(Path.Combine(folder,"UFC 6 novo.exe"))) throw new IOException("UFC 6 engine was not found. Select PORTHEON\\games\\UFC6, bin, or novo. Your extracted game-data folder is different.");
             return folder;
@@ -136,7 +137,7 @@ namespace UFC6OverlaySetup {
                 if (otherState.PortheonReplaced) target.SiblingEngineNotice = "Other engine (" + otherDisplay + ") was also replaced by a PORTHEON update and will be repaired together (click Repair / Reinstall).";
                 else if (!otherState.Supported && (otherState.Installed > 0 || otherState.ReplacedFiles.Count > 0)) target.SiblingEngineNotice = "Other engine (" + otherDisplay + ") has an updated game executable and needs attention.";
                 else if (otherState.Installed > 0 && otherState.Current < otherState.TotalFiles) target.SiblingEngineNotice = "Other engine (" + otherDisplay + ") has an older or partial overlay installed and will be updated together.";
-                else if (otherState.Conflicts.Count != 0) target.SiblingEngineNotice = "Other engine (" + otherDisplay + ") has conflicting files (" + string.Join(", ",otherState.Conflicts) + ") and will be skipped.";
+                else if (otherState.Conflicts.Count != 0) target.SiblingEngineNotice = "Other engine (" + otherDisplay + ") has conflicting files (" + string.Join(", ",otherState.Conflicts) + "); both-folder installation is blocked.";
                 else if (otherState.Supported && otherState.RuntimeAvailable) target.SiblingEngineNotice = "Both " + Inspection.DescribeEngine(currentFolder,target.EngineLabel) + " and " + otherDisplay + " were detected and will be managed together.";
             } catch { }
         }
@@ -194,33 +195,31 @@ namespace UFC6OverlaySetup {
         }
         public string ApplyAll(string folder,bool remove,bool repair) {
             string primary = Normalize(folder);
-            string message = Apply(primary,remove,repair);
-            if (NewEngine == null) return message;
+            if (NewEngine == null) return Apply(primary,remove,repair);
             bool isNovo = File.Exists(Path.Combine(primary,"UFC 6 novo.exe"));
             DirectoryInfo parent = Directory.GetParent(primary);
-            if (parent == null) return message;
+            if (parent == null) return Apply(primary,remove,repair);
             string sibling = Path.Combine(parent.FullName,isNovo ? "bin" : "novo");
-            if (!Directory.Exists(sibling)) return message;
+            if (!Directory.Exists(sibling)) return Apply(primary,remove,repair);
             Manager siblingManager = isNovo ? this : NewEngine;
             string siblingExe = isNovo ? "UFC 6.exe" : "UFC 6 novo.exe";
-            if (!File.Exists(Path.Combine(sibling,siblingExe))) return message;
+            if (!File.Exists(Path.Combine(sibling,siblingExe))) return Apply(primary,remove,repair);
             Inspection sibState = siblingManager.InspectCore(sibling);
             string priDisplay = Inspection.DescribeEngine(primary,isNovo ? NewEngine.engineLabel : engineLabel);
             string sibDisplay = Inspection.DescribeEngine(sibling,sibState.EngineLabel);
             if (!remove) {
-                if (sibState.Supported && sibState.RuntimeAvailable && sibState.HardConflicts.Count == 0 && (sibState.Conflicts.Count == 0 || repair)) {
-                    siblingManager.Apply(sibling,false,repair);
-                    return "Overlay v" + Version + " installed for both " + priDisplay + " and " + sibDisplay + ".\r\nLaunch UFC 6 normally, then hold LB + RB + Menu for about one second, or press F10.\r\n\r\nSettings and screenshots were kept. Recognized older files were backed up.";
-                }
-                if (sibState.Supported) {
-                    string reason = !sibState.RuntimeAvailable ? "original threading runtime is missing" : sibState.HardConflicts.Count != 0 ? "linked/directory conflict" : "conflicting files (" + string.Join(", ",sibState.Conflicts) + ")";
-                    return message + "\r\n\r\nNote: " + sibDisplay + " was skipped (" + reason + ").";
-                }
-            } else if (sibState.Installed > 0 && sibState.Conflicts.Count == 0) {
-                siblingManager.Apply(sibling,true,false);
-                return "Overlay removed from both " + priDisplay + " and " + sibDisplay + ". Settings, screenshots, and upgrade backups were kept.";
+                if (!sibState.Supported || !sibState.RuntimeAvailable || sibState.HardConflicts.Count != 0 || (sibState.Conflicts.Count != 0 && !repair))
+                    throw new IOException(sibDisplay + " is not ready for installation. Neither engine folder was changed.\r\n" + sibState.Summary(this));
+            } else if (sibState.Installed > 0 && sibState.Conflicts.Count != 0) {
+                throw new IOException(sibDisplay + " contains conflicting files. Neither engine folder was changed.");
             }
-            return message;
+            RequireClosed(primary);RequireClosed(sibling);
+            string message=Apply(primary,remove,repair);
+            if(remove && sibState.Installed==0)return message;
+            try{siblingManager.Apply(sibling,remove,repair);}
+            catch(Exception error){throw new IOException(priDisplay + " was changed, but " + sibDisplay + " failed. Check both engine folders before retrying. " + error.Message,error);}
+            return remove ? "Overlay removed from both " + priDisplay + " and " + sibDisplay + ". Settings, screenshots, and upgrade backups were kept." :
+                "Overlay v" + Version + " installed for both " + priDisplay + " and " + sibDisplay + ".\r\nSettings and screenshots were kept. Recognized older files were backed up.";
         }
         public string Apply(string folder,bool remove) {
             return Apply(folder,remove,false);
@@ -290,31 +289,30 @@ namespace UFC6OverlaySetup {
         readonly TextBox folder = new TextBox();
         readonly TextBox status = new TextBox();
         readonly ModernButton support = new ModernButton();
-        readonly ModernButton browse = new ModernButton(), check = new ModernButton(), install = new ModernButton(), remove = new ModernButton(), updates = new ModernButton(), mode = new ModernButton();
+        readonly ModernButton browse = new ModernButton(), check = new ModernButton(), install = new ModernButton(), remove = new ModernButton(), updates = new ModernButton();
         bool busy;
         bool repairMode;
         public SetupForm(Manager manager) {
             this.manager = manager;
             Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
-            Text = "UFC 6 Actions Overlay Setup — v" + manager.Version;
+            Text = "UFC 6 Parsectagon Overlay Setup — v" + manager.Version;
             ClientSize=new Size(760,660);
-            var title=ModernUi.Label("UFC 6 Actions Overlay",116,74,600,38,21,true);
+            var title=ModernUi.Label("UFC 6 Parsectagon Overlay",116,74,610,38,19,true);
             var hint=ModernUi.Label("INSTALL  /  UPDATE  /  REMOVE",118,116,580,24,9,false,true);
             var version=ModernUi.Label("SETUP  v"+manager.Version,32,145,620,20,9,false,true);
             var pathCard=new ModernCard {Bounds=new Rectangle(32,178,696,182)};
             pathCard.Controls.Add(ModernUi.Label("1   Choose PORTHEON's UFC6 folder",20,16,650,28,12,true));
-            pathCard.Controls.Add(ModernUi.Label("Select PORTHEON\\games\\UFC6, bin, or novo for PS5 Pro / DLSS.",20,48,650,22,10,false,true));
+            pathCard.Controls.Add(ModernUi.Label("Select UFC6, bin, or novo. Setup checks both installed engines.",20,48,650,22,10,false,true));
             var input=new ModernCard {Bounds=new Rectangle(20,80,500,44)};
             folder.SetBounds(14,11,472,26);folder.BorderStyle=BorderStyle.None;folder.BackColor=ModernUi.Card;folder.ForeColor=ModernUi.Text;folder.Font=new Font("Segoe UI",11);input.Controls.Add(folder);
             browse.Text="Browse...";browse.SetBounds(536,80,140,44);
             check.Text="Check folder";check.SetBounds(20,136,140,32);
-            mode.Text="Switch engine: PS5 Pro";mode.SetBounds(176,136,280,32);
             updates.Text="Check for updates";updates.SetBounds(506,136,170,32);
-            pathCard.Controls.AddRange(new Control[]{input,browse,check,mode,updates});
+            pathCard.Controls.AddRange(new Control[]{input,browse,check,updates});
             var infoCard=new ModernCard {Bounds=new Rectangle(32,376,696,174)};
             infoCard.Controls.Add(ModernUi.Label("2   Check compatibility",20,16,650,27,12,true));
             status.SetBounds(20,52,656,104);ModernUi.Status(status);
-            status.Text="Choose the UFC6 folder inside PORTHEON's games folder.\r\nBoth Original / Parsec (bin) and PS5 Pro / DLSS (novo) are updated together when present.\r\nClick Check folder to verify the installation location.";infoCard.Controls.Add(status);
+            status.Text="Choose the UFC6 folder inside PORTHEON's games folder.\r\nOne Install / Update action covers both bin and novo when present.\r\nClick Check folder to verify the installation location.";infoCard.Controls.Add(status);
             support.Text="Export support report...";support.SetBounds(32,574,238,44);support.Enabled=false;
             support.Click+=delegate{try{using(var diagnostic=new DiagnosticsForm(manager.Version,Diagnostics.Folder(folder.Text))){diagnostic.ShowDialog(this);}}catch(Exception error){status.Text=error.Message;}};
             install.Text="Install / Update";install.SetBounds(288,574,214,44);install.Tone=ButtonTone.Primary;install.Enabled=false;
@@ -326,9 +324,8 @@ namespace UFC6OverlaySetup {
             browse.Click+=delegate{try{string selected=FolderPicker.Select(Handle,folder.Text);if(selected!=null){folder.Text=selected;Run(null);}}catch(Exception error){status.Text="Could not open the folder picker: "+error.Message;}};
             folder.TextChanged += delegate { support.Enabled = install.Enabled = remove.Enabled = false; };
             check.Click += delegate { Run(null); };
-            mode.Click += delegate { try { string path=Manager.Normalize(folder.Text); string root=Path.GetFileName(path).Equals("novo",StringComparison.OrdinalIgnoreCase)?Directory.GetParent(path).FullName:Path.GetFileName(path).Equals("bin",StringComparison.OrdinalIgnoreCase)?Directory.GetParent(path).FullName:path; folder.Text=Path.Combine(root,Path.GetFileName(path).Equals("novo",StringComparison.OrdinalIgnoreCase)?"bin":"novo");Run(null); } catch(Exception error) { status.Text=error.Message; } };
             install.Click += delegate { Run(false, repairMode); };
-            remove.Click += delegate { if (MessageBox.Show(this,"Remove the overlay from this game folder? Settings and screenshots will be kept.","Remove overlay",MessageBoxButtons.YesNo,MessageBoxIcon.Question,MessageBoxDefaultButton.Button2) == DialogResult.Yes) Run(true, false); };
+            remove.Click += delegate { if (MessageBox.Show(this,"Remove the overlay from both installed engine folders? Settings and screenshots will be kept.","Remove overlay",MessageBoxButtons.YesNo,MessageBoxIcon.Question,MessageBoxDefaultButton.Button2) == DialogResult.Yes) Run(true, false); };
             FormClosing += delegate(object sender,FormClosingEventArgs e) { if (busy) e.Cancel = true; };
         }
         public void SelectFolder(string path) { folder.Text=path;Run(null); }
@@ -336,7 +333,7 @@ namespace UFC6OverlaySetup {
         void Run(bool? removal,bool repair) {
             if (busy) return;
             busy = true; string path = folder.Text;
-            folder.Enabled = browse.Enabled = check.Enabled = mode.Enabled = updates.Enabled = support.Enabled = install.Enabled = remove.Enabled = false;
+            folder.Enabled = browse.Enabled = check.Enabled = updates.Enabled = support.Enabled = install.Enabled = remove.Enabled = false;
             status.Text = removal.HasValue ? (repair ? "Repairing overlay…" : "Applying changes…") : "Checking engine and installed files…"; UseWaitCursor = true;
             var worker = new BackgroundWorker();
             worker.DoWork += delegate(object sender,DoWorkEventArgs e) {
@@ -345,11 +342,10 @@ namespace UFC6OverlaySetup {
                 e.Result = new object[] { state,message };
             };
             worker.RunWorkerCompleted += delegate(object sender,RunWorkerCompletedEventArgs e) {
-                busy = false; UseWaitCursor = false; folder.Enabled = browse.Enabled = check.Enabled = mode.Enabled = updates.Enabled = true;
+                busy = false; UseWaitCursor = false; folder.Enabled = browse.Enabled = check.Enabled = updates.Enabled = true;
                 if (e.Error != null) { status.Text = e.Error.Message + "\r\n\r\nIf Windows denies access, close the game first. For a protected game folder, right-click this setup and choose Run as administrator."; }
                 else {
                     var values = (object[])e.Result; var state = (Inspection)values[0]; folder.Text = state.Folder;
-                    mode.Text=Path.GetFileName(state.Folder).Equals("novo",StringComparison.OrdinalIgnoreCase)?"Switch engine: Original / Parsec":"Switch engine: PS5 Pro";
                     status.Text = values[1] == null ? state.Summary(manager) : (string)values[1];
                     support.Enabled=true;
                     repairMode = (state.PortheonReplaced || state.SiblingPortheonReplaced) && state.HardConflicts.Count == 0;
@@ -387,7 +383,7 @@ namespace UFC6OverlaySetup {
                 return 0;
             } catch (Exception error) {
                 if (args.Length == 2 && args[0] == "--self-test") { File.WriteAllText(args[1],"FAIL: " + error); return 1; }
-                MessageBox.Show(error.Message,"UFC 6 Actions Overlay Setup",MessageBoxButtons.OK,MessageBoxIcon.Error); return 1;
+                MessageBox.Show(error.Message,"UFC 6 Parsectagon Overlay Setup",MessageBoxButtons.OK,MessageBoxIcon.Error); return 1;
             }
         }
     }

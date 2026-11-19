@@ -270,7 +270,7 @@ def documents_folder() -> Path:
 
 def save_report(report: dict, destination: Path | None = None) -> Path:
     if destination is None:
-        destination = (documents_folder() / "Parsectagon" / "Fight Reports" /
+        destination = (documents_folder() / "UFC 6 Parsectagon Overlay" / "Fight Reports" /
                        f"fight-complete-{report['id'][:8]}.json")
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

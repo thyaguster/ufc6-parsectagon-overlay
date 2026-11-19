@@ -220,6 +220,10 @@ namespace UFC6OverlaySetup {
                 string ufc6Root = Directory.GetParent(folder).FullName;
                 runtimeManager.Apply(folder,true);
                 runtimeManager.Apply(novo,true);
+                File.WriteAllBytes(Path.Combine(novo,"winmm.dll"),Bytes("foreign bridge"));
+                Reject(() => runtimeManager.ApplyAll(ufc6Root,false,false),"A sibling conflict must block both folders before installation.");
+                Assert(runtimeManager.Inspect(folder).Installed==0,"Sibling preflight must leave bin untouched.");
+                File.Delete(Path.Combine(novo,"winmm.dll"));
                 string bothInstallMsg = runtimeManager.ApplyAll(ufc6Root,false,false);
                 Assert(bothInstallMsg.Contains("Original / Parsec (bin)") && bothInstallMsg.Contains("PS5 Pro / DLSS (novo)"),"ApplyAll must report installing both engines.");
                 Assert(runtimeManager.Inspect(folder).Current == runtimeManager.Order.Count && runtimeManager.Inspect(novo).Current == runtimeManager.NewEngine.Order.Count,"ApplyAll must install both bin and novo.");

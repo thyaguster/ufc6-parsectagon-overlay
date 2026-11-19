@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-only
 using System.Reflection;
 #if OVERLAY_UPDATER
-[assembly: AssemblyTitle("UFC 6 Actions Overlay Updates")]
+[assembly: AssemblyTitle("UFC 6 Parsectagon Overlay Updates")]
 #else
-[assembly: AssemblyTitle("UFC 6 Actions Overlay Setup")]
+[assembly: AssemblyTitle("UFC 6 Parsectagon Overlay Setup")]
 #endif
-[assembly: AssemblyProduct("UFC 6 Actions Overlay")]
-[assembly: AssemblyDescription("Install, update, or remove the UFC 6 Actions Overlay for the supported PORTHEON engine.")]
-[assembly: AssemblyVersion("0.9.82.0")]
-[assembly: AssemblyFileVersion("0.9.82.0")]
+[assembly: AssemblyProduct("UFC 6 Parsectagon Overlay")]
+[assembly: AssemblyDescription("Install, update, or remove UFC 6 Parsectagon Overlay for supported PORTHEON engines.")]
+[assembly: AssemblyVersion("0.9.85.0")]
+[assembly: AssemblyFileVersion("0.9.85.0")]

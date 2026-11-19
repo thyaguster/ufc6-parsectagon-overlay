@@ -102,6 +102,6 @@ void theme_load(OverlayTheme *t,const wchar_t *cfg,int choice){
 }
 void theme_create_default(const wchar_t *cfg){
     HANDLE f=CreateFileW(cfg,GENERIC_WRITE,FILE_SHARE_READ,NULL,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,NULL);if(f==INVALID_HANDLE_VALUE)return;
-    const char body[]="; UFC 6 Actions Overlay launcher theme. Existing files are never overwritten.\r\n; Presets: Green, Blue, Red, Purple, Amber. Optional overrides: #RRGGBB.\r\n; Settings > Appearance > Theme > From config follows this file (reloaded while running).\r\n[Theme]\r\nPreset=Green\r\n;Accent=#76E094\r\n;Background=#11161E\r\n;Surface=#1D2531\r\n;Border=#2A3544\r\n;Text=#DAE4F0\r\n;Muted=#B0B8C5\r\n\r\n; First-run defaults only; saved client settings take priority.\r\n[Appearance]\r\nUIScale=100\r\nFontSize=18\r\nBoxStyle=Rounded\r\nWindowSize=Compact\r\n";
+    const char body[]="; UFC 6 Parsectagon Overlay launcher theme. Existing files are never overwritten.\r\n; Presets: Green, Blue, Red, Purple, Amber. Optional overrides: #RRGGBB.\r\n; Settings > Appearance > Theme > From config follows this file (reloaded while running).\r\n[Theme]\r\nPreset=Green\r\n;Accent=#76E094\r\n;Background=#11161E\r\n;Surface=#1D2531\r\n;Border=#2A3544\r\n;Text=#DAE4F0\r\n;Muted=#B0B8C5\r\n\r\n; First-run defaults only; saved client settings take priority.\r\n[Appearance]\r\nUIScale=100\r\nFontSize=18\r\nBoxStyle=Rounded\r\nWindowSize=Compact\r\n";
     DWORD wrote=0;WriteFile(f,body,sizeof(body)-1,&wrote,NULL);CloseHandle(f);
 }

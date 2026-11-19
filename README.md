@@ -18,12 +18,14 @@
 
 ## Quick installation
 
-1. [Download the latest installer](https://github.com/thyaguster/ufc6-parsectagon-overlay/releases/latest) (or build from source below).
+1. [Download the latest installer](https://github.com/thyaguster/ufc6-parsectagon-overlay/releases/latest): **UFC6-Parsectagon-Overlay-Setup-*.exe**.
 2. Close **UFC 6** and **PORTHEON**, run the installer, and select your **`PORTHEON\games\UFC6`** folder (the launcher folder containing `UFC6.exe`, not your extracted game-data folder).
-3. Click **Check folder**, then **Install / Update** — the installer automatically installs or updates both **Original / Parsec (`bin`)** and **PS5 Pro / DLSS (`novo`)** together when present (use **Switch engine** only if you want to inspect either folder individually).
+3. Click **Check folder**, then **Install / Update** once. The installer checks and updates both **Original / Parsec (`bin`)** and **PS5 Pro / DLSS (`novo`)** when present.
 4. Launch UFC 6 normally. Hold **LB + RB + Menu/Start** for ~800 ms, press **Guide**, or press **F10** to open the overlay.
 
 > **After a PORTHEON update:** If a PORTHEON update overwrites overlay files, run the installer and click **Repair / Reinstall** to restore both engines while keeping your settings, screenshots, and `ufc6_pthread_original.dll`.
+
+**Support report:** Open **Export support report...** in setup or from the overlay. One ZIP contains separate component checks and bounded logs for both `bin` and `novo` when present. New reports are saved in `Documents/UFC 6 Parsectagon Overlay/SupportReports`; older reports remain in the previous folder.
 
 > **Upgrading from `ufc6-actions-overlay`:** `ufc6-parsectagon-overlay` is the direct successor to [ufc6-actions-overlay](https://github.com/thyaguster/ufc6-actions-overlay) and shares the same verified engine hooks, controller-icon patcher, Photo Mode, Replay controls, and Career/Live cheats. Keep `ufc6_pthread_original.dll` intact in `bin\`.
 
