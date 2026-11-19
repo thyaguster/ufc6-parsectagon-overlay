@@ -6,6 +6,12 @@
 #include "exact_hooks.h"
 #include "ufc4_live_cheats.h"
 
+#if !defined(UFC4_TEST) && !defined(UFC4_EXPERIMENTAL_LIVE_STAMINA)
+int ufc4_live_stamina_prepare(void){return 0;}
+unsigned ufc4_live_stamina_mask(void){return 0;}
+int ufc4_live_stamina_toggle(int fighter,unsigned *mask){(void)fighter;(void)mask;return 0;}
+#else
+
 static const unsigned char stamina_site[]={
     0xc5,0xfa,0x5d,0xc1, /* vminss xmm0,xmm0,xmm1 */
     0xc5,0xfa,0x11,0x00, /* vmovss [rax],xmm0 */
@@ -13,6 +19,7 @@ static const unsigned char stamina_site[]={
     0x48,0x3b,0x45,0xd0 /* cmp rax,[rbp-0x30] */
 };
 static volatile LONG stamina_mask;
+static volatile LONG *detour_mask;
 static int prepared; /* 0 unchecked, 1 installed, -1 unsupported */
 static void *original_site;
 static SRWLOCK setup_guard=SRWLOCK_INIT;
@@ -64,31 +71,36 @@ static void jump_back(unsigned char *code,size_t *used,const void *target){
     append(code,used,jump,sizeof(jump));
     uintptr_t address=(uintptr_t)target;append(code,used,(const unsigned char*)&address,sizeof(address));
 }
+static void mask_disp(unsigned char *code,size_t field,size_t after){
+    int32_t delta=(int32_t)((intptr_t)(code+4096)-(intptr_t)(code+after));
+    memcpy(code+field,&delta,sizeof(delta));
+}
 
 static unsigned char *make_detour(unsigned char *site){
-    unsigned char *code=VirtualAlloc(NULL,4096,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);
+    unsigned char *code=VirtualAlloc(NULL,8192,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);
     if(!code)return NULL;
-    size_t n=0,branch_right,branch_decide,branch_off,branch_after,right,decide,off,after;
-    static const unsigned char begin[]={0xc5,0xfa,0x5d,0xc1,0x41,0x52,0x49,0xba};
+    size_t n=0,branch_empty,branch_right,branch_decide,branch_off,branch_after,right,decide,off,after;
+    static const unsigned char begin[]={0xc5,0xfa,0x5d,0xc1};
     append(code,&n,begin,sizeof(begin));
-    uintptr_t mask_address=(uintptr_t)&stamina_mask;
-    append(code,&n,(const unsigned char*)&mask_address,sizeof(mask_address));
-    static const unsigned char side[]={0x45,0x8b,0x12,0x83,0xb8,0x18,0x01,0x00,0x00,0x00,0x75,0};
+    static const unsigned char empty[]={0x83,0x3d,0,0,0,0,0,0x74,0};
+    size_t empty_at=n;append(code,&n,empty,sizeof(empty));mask_disp(code,empty_at+2,empty_at+7);branch_empty=n-1;
+    static const unsigned char side[]={0x83,0xb8,0x18,0x01,0x00,0x00,0x00,0x75,0};
     append(code,&n,side,sizeof(side));branch_right=n-1;
-    static const unsigned char left[]={0x41,0xf6,0xc2,0x01,0xeb,0};
-    append(code,&n,left,sizeof(left));branch_decide=n-1;
+    static const unsigned char left[]={0xf6,0x05,0,0,0,0,0x01,0xeb,0};
+    size_t left_at=n;append(code,&n,left,sizeof(left));mask_disp(code,left_at+2,left_at+7);branch_decide=n-1;
     right=n;
-    static const unsigned char right_test[]={0x41,0xf6,0xc2,0x02};
-    append(code,&n,right_test,sizeof(right_test));
+    static const unsigned char right_test[]={0xf6,0x05,0,0,0,0,0x02};
+    append(code,&n,right_test,sizeof(right_test));mask_disp(code,right+2,right+7);
     decide=n;
-    static const unsigned char choice[]={0x41,0x5a,0x74,0,0xc5,0xfa,0x11,0x08,0xeb,0};
-    append(code,&n,choice,sizeof(choice));branch_off=decide+3;branch_after=n-1;
+    static const unsigned char choice[]={0x74,0,0xc5,0xfa,0x11,0x08,0xeb,0};
+    append(code,&n,choice,sizeof(choice));branch_off=decide+1;branch_after=n-1;
     off=n;
     static const unsigned char normal[]={0xc5,0xfa,0x11,0x00};
     append(code,&n,normal,sizeof(normal));
     after=n;
     static const unsigned char tail[]={0x49,0x8b,0x00,0x48,0x3b,0x45,0xd0};
     append(code,&n,tail,sizeof(tail));jump_back(code,&n,site+sizeof(stamina_site));
+    code[branch_empty]=(unsigned char)(off-(branch_empty+1));
     code[branch_right]=(unsigned char)(right-(branch_right+1));
     code[branch_decide]=(unsigned char)(decide-(branch_decide+1));
     code[branch_off]=(unsigned char)(off-(branch_off+1));
@@ -116,7 +128,10 @@ int ufc4_live_stamina_prepare(void){
         if(detour){
             ExactHook hook={site,detour,&original_site,stamina_site,sizeof(stamina_site)};
             const char *error=NULL;
-            if(install_exact_hooks(&hook,1,&error))prepared=1;
+            if(install_exact_hooks(&hook,1,&error)){
+                detour_mask=(volatile LONG*)(detour+4096);
+                prepared=1;
+            }
             else VirtualFree(detour,0,MEM_RELEASE);
         }
         if(!prepared)prepared=-1;
@@ -131,7 +146,9 @@ int ufc4_live_stamina_toggle(int fighter,unsigned *mask){
     for(;;){
         LONG old=InterlockedCompareExchange(&stamina_mask,0,0);
         LONG next=old^bit;
-        if(InterlockedCompareExchange(&stamina_mask,next,old)==old){*mask=(unsigned)next&3u;return 1;}
+        if(InterlockedCompareExchange(&stamina_mask,next,old)==old){
+            InterlockedExchange(detour_mask,next);*mask=(unsigned)next&3u;return 1;
+        }
     }
 }
 #ifdef UFC4_TEST
@@ -139,4 +156,5 @@ __declspec(dllexport) int Ufc4TestStaminaPrepare(void){return ufc4_live_stamina_
 __declspec(dllexport) unsigned Ufc4TestStaminaToggle(int fighter){
     unsigned mask=0;return ufc4_live_stamina_toggle(fighter,&mask)?mask:~0u;
 }
+#endif
 #endif

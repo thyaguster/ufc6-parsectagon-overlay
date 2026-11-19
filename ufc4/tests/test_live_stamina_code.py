@@ -14,19 +14,29 @@ class LiveStaminaCodeTest(unittest.TestCase):
         build.argtypes = [ctypes.POINTER(ctypes.c_ubyte), ctypes.c_size_t]
         self.assertEqual(build(code, len(code)), 1)
         data = bytes(code)
-        self.assertTrue(data.startswith(bytes.fromhex("c5 fa 5d c1 41 52 49 ba")))
+        self.assertTrue(data.startswith(bytes.fromhex("c5 fa 5d c1 83 3d")))
 
-        right = data.index(bytes.fromhex("41 f6 c2 02"))
-        choose = data.index(bytes.fromhex("41 5a 74"))
+        side = data.index(bytes.fromhex("83 b8 18 01 00 00 00 75"))
+        left = side + 9
+        self.assertEqual(data[left:left + 2], bytes.fromhex("f6 05"))
+        self.assertEqual(data[left + 6], 1)
+        right = left + 9
+        self.assertEqual(data[right:right + 2], bytes.fromhex("f6 05"))
+        self.assertEqual(data[right + 6], 2)
+        choose = right + 7
         keep = data.index(bytes.fromhex("c5 fa 11 08"))
         original = data.index(bytes.fromhex("c5 fa 11 00"))
         tail = data.index(bytes.fromhex("49 8b 00 48 3b 45 d0"))
-        branch_right = data.index(bytes.fromhex("75"), 24)
-        branch_choose = data.index(bytes.fromhex("eb"), branch_right)
-        branch_original = data.index(bytes.fromhex("74"), choose)
-        branch_tail = data.index(bytes.fromhex("eb"), keep)
+        self.assertNotIn(bytes.fromhex("41 52"), data[:tail])
+        self.assertNotIn(bytes.fromhex("41 5a"), data[:tail])
+        branch_empty = 11
+        branch_right = side + 7
+        branch_choose = left + 7
+        branch_original = choose
+        branch_tail = keep + 4
 
         for branch, target in (
+            (branch_empty, original),
             (branch_right, right),
             (branch_choose, choose),
             (branch_original, original),

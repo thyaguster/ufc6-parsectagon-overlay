@@ -1,6 +1,6 @@
 # UFC 4 Actions Overlay prototype
 
-This is the UFC 4 expansion of the [existing overlay project](../README.md), kept in its `ufc4` subfolder. It is a prototype for PORTHEON's native `sacredfire-game.exe` Vulkan renderer. It does not load UFC 6 memory hooks. The first live cheat controls change UFC 4 stamina during the current session; career cheats, damage cheats, Photo Mode, and Parsectagon are still under investigation.
+This is the UFC 4 expansion of the [existing overlay project](../README.md), kept in its `ufc4` subfolder. It is a prototype for PORTHEON's native `sacredfire-game.exe` Vulkan renderer. It does not load UFC 6 memory hooks. Live cheats, Photo Mode, and Parsectagon are still under investigation.
 
 Open with **F10** or **LB + RB + Menu**. Navigate with the D-pad, select with A/Cross, and go back with B/Circle. The menu contains Resume, Take screenshot, Open screenshots folder, Restart game, Settings, Cheats, and Quit game. Screenshots use Windows' Pictures/Screenshots folder and carry a `UFC4_` prefix. **F12** also captures a screenshot. Settings has separate overlay labels and PlayStation, Xbox, or keyboard and mouse game prompts, plus a mute-when-unfocused switch. Changing game artwork confirms a restart, validates the archive before patching, and applies the change after UFC 4 exits. An unsupported or modified archive is left alone.
 
@@ -16,6 +16,6 @@ Verified in a running UFC 4 session: the overlay appears in the Vulkan frame; F1
 
 Settings includes **Skip intros**. Changing it saves immediately in the overlay settings and updates SacredFire’s current `skip_movies` value. On the next UFC 4 launch, the startup proxy applies the saved choice to the movie filter and a reversible local patch for the legal/logo animation, title keypress, and known offline login prompt. No forced restart is required. The user confirmed the local startup skip works in-game. See [startup investigation](UFC4-STARTUP.md).
 
-**Cheats → Infinite stamina** changes the current fight immediately for the selected left or right fighter. The overlay checks for one exact v28 stamina site before installing a session-only hook. If the code differs or another cheat has already patched that site, the controls show **Unavailable**. The overlay does not edit PORTHEON's `cheats.json`. See [cheat investigation](UFC4-CHEATS.md).
+**Cheats → Infinite stamina** is under live-hook development. The first runtime prototype caused a fight-start crash and was rolled back. Default builds now show **Unavailable** and do not install the hook. The overlay does not edit PORTHEON's `cheats.json`. See [cheat investigation](UFC4-CHEATS.md).
 
 **Settings → Mute when unfocused** saves to `ufc4_actions.ini` and applies immediately. It mutes UFC 4's own Windows audio sessions whenever its window loses focus, including when the Windows key is pressed, then restores them when UFC 4 regains focus. The previous `MuteWhenMinimized` choice is read as a migration fallback.
