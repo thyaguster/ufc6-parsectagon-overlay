@@ -1,16 +1,14 @@
-param([switch]$ExperimentalLiveStamina)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $zig = Join-Path $projectRoot '.tools/ziglang/zig.exe'
 $vulkan = Join-Path $projectRoot 'vendor/vulkan-headers/include'
-$liveFlag = if ($ExperimentalLiveStamina) { @('-DUFC4_EXPERIMENTAL_LIVE_STAMINA') } else { @() }
 if (!(Test-Path -LiteralPath $zig)) { throw 'Zig compiler missing' }
 Push-Location -LiteralPath $PSScriptRoot
 try {
     New-Item -ItemType Directory -Path dist -Force | Out-Null
-    & $zig cc -target x86_64-windows-gnu -O2 -Wall -Wextra -shared @liveFlag -Isrc -I../src src/ufc4_core.c src/ufc4_live_cheats.c src/screenshot_folder.c ../src/audio_session_mute.c ../src/exact_hooks.c -lgdi32 -luser32 -lkernel32 -lshell32 -lole32 -luuid -o dist/ufc4_actions_core.dll
+    & $zig cc -target x86_64-windows-gnu -O2 -Wall -Wextra -shared -Isrc -I../src src/ufc4_core.c src/ufc4_live_cheats.c src/screenshot_folder.c ../src/audio_session_mute.c -lgdi32 -luser32 -lkernel32 -lshell32 -lole32 -luuid -o dist/ufc4_actions_core.dll
     if ($LASTEXITCODE) { throw 'Core build failed' }
-    & $zig cc -target x86_64-windows-gnu -O2 -Wall -Wextra -fno-omit-frame-pointer -shared -DUFC4_TEST -Isrc -I../src src/ufc4_core.c src/ufc4_live_cheats.c src/screenshot_folder.c ../src/audio_session_mute.c ../src/exact_hooks.c -lgdi32 -luser32 -lkernel32 -lshell32 -lole32 -luuid -o dist/ufc4_actions_core_test.dll
+    & $zig cc -target x86_64-windows-gnu -O2 -Wall -Wextra -shared -DUFC4_TEST -Isrc -I../src src/ufc4_core.c src/ufc4_live_cheats.c src/screenshot_folder.c ../src/audio_session_mute.c -lgdi32 -luser32 -lkernel32 -lshell32 -lole32 -luuid -o dist/ufc4_actions_core_test.dll
     if ($LASTEXITCODE) { throw 'Core test build failed' }
     & $zig cc -target x86_64-windows-gnu -O2 -Wall -Wextra -shared "-I$vulkan" -Isrc src/vulkan_menu_layer.c src/screenshot_png.c src/screenshot_folder.c src/vulkan_layer.def -lkernel32 -lole32 -lwindowscodecs -luuid -lshell32 -o dist/ufc4_actions_layer.dll
     if ($LASTEXITCODE) { throw 'Layer build failed' }

@@ -16,6 +16,6 @@ Verified in a running UFC 4 session: the overlay appears in the Vulkan frame; F1
 
 Settings includes **Skip intros**. Changing it saves immediately in the overlay settings and updates SacredFire’s current `skip_movies` value. On the next UFC 4 launch, the startup proxy applies the saved choice to the movie filter and a reversible local patch for the legal/logo animation, title keypress, and known offline login prompt. No forced restart is required. The user confirmed the local startup skip works in-game. See [startup investigation](UFC4-STARTUP.md).
 
-**Cheats → Infinite stamina** is under live-hook development. The first runtime prototype caused a fight-start crash and was rolled back. Default builds now show **Unavailable** and do not install the hook. The overlay does not edit PORTHEON's `cheats.json`. See [cheat investigation](UFC4-CHEATS.md).
+**Cheats → Infinite stamina** uses a dormant eight-byte hook linked at launch and changes a writable flag for immediate left/right stamina control. The user verified left, right, and both controls during a fight without a crash. If the bridge is missing, the controls show **Unavailable**. The overlay does not edit PORTHEON's `cheats.json`. See [cheat investigation](UFC4-CHEATS.md).
 
 **Settings → Mute when unfocused** saves to `ufc4_actions.ini` and applies immediately. It mutes UFC 4's own Windows audio sessions whenever its window loses focus, including when the Windows key is pressed, then restores them when UFC 4 regains focus. The previous `MuteWhenMinimized` choice is read as a migration fallback.
