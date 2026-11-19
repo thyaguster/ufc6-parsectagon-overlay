@@ -54,7 +54,7 @@ typedef struct {
     int first_player_only;
     int career_amount_index[2],career_kind,game_icons_style,game_icons_from_overlay_change,game_icons_return_page,game_icons_return_selection,training_multiplier_index,startup_patch_enable;
     int binding_action,key_capturing,capture_target,theme_selection,font_index,box_style,window_size,settings_legacy,layout_style,backdrop_style,master_preset,topbar_tab;uint32_t assigned_chord;
-    int favorites[MENU_MAX_FAVORITES],favorite_count,open_favorites_first,fav_search_category,fav_search_mode;
+    int favorites[MENU_MAX_FAVORITES],favorite_count,open_favorites_first,fav_search_category,fav_search_mode,fav_carousel_index;
     char fav_search_query[32];
 } MenuState;
 
@@ -200,7 +200,7 @@ static int next_visible_preset(int current,int backwards){
 static int menu_scroll_page(int page){return page==PAGE_LOBBY||page==PAGE_STARTUP||menu_setting_page(page)||page==PAGE_CHEATS||page==PAGE_KEYBINDS||page==PAGE_THEME||page==PAGE_PHOTO||page==PAGE_PHOTO_CONTROLS||page==PAGE_PHOTO_EFFECTS||page==PAGE_PHOTO_WATERMARK||page==PAGE_PERFORMANCE||page==PAGE_FAVORITE_SEARCH;}
 static int menu_rows(const MenuState *s) {
     if(s->page==PAGE_MAIN&&s->layout_style!=LAYOUT_CLASSIC)return topbar_tab_rows_for(s);
-    if(s->page==PAGE_FAVORITE_SEARCH){int ids[FAV_CATALOG_COUNT];return 2+fav_filter_items(s->fav_search_category,s->fav_search_query,ids,FAV_CATALOG_COUNT);}
+    if(s->page==PAGE_FAVORITE_SEARCH){int ids[FAV_CATALOG_COUNT];return 3+fav_filter_items(s->fav_search_category,s->fav_search_query,ids,FAV_CATALOG_COUNT);}
     return s->page==PAGE_FIGHT_REPORT?4:s->page==PAGE_LOBBY_HOME?8:s->page==PAGE_STREAM_PRESETS?5:s->page==PAGE_HOST_FIGHT?7:s->page==PAGE_LOBBY?8+s->lobby_room_count:s->page==PAGE_LOBBY_ACCOUNT?3:s->page==PAGE_WELCOME?1:s->page==PAGE_STARTUP?3:s->page==PAGE_STARTUP_CONFIRM||s->page==PAGE_AVATAR_REPAIR||s->page==PAGE_AVATAR_ALWAYS?2:s->page==PAGE_PERFORMANCE?PERF_ROWS:s->page==PAGE_PERFORMANCE_RESTART||s->page==PAGE_PERFORMANCE_DISCARD?2:s->page==PAGE_PHOTO_EFFECTS?FX_ROWS:s->page==PAGE_PHOTO_WATERMARK?MARK_ROWS:s->page==PAGE_PHOTO?12:s->page==PAGE_PHOTO_CONTROLS?12:s->page==PAGE_SETTINGS_HOME?7:s->page==PAGE_APPEARANCE?11:s->page==PAGE_CONTROLS?5:s->page==PAGE_GAME_SETTINGS?11:s->page==PAGE_TOOLS?6:s->page==PAGE_EXPERIMENTAL?5:s->page==PAGE_KEYBINDS?(BIND_COUNT+1):s->page==PAGE_BINDING?5:s->page==PAGE_THEME?7:s->page==PAGE_MAIN?MAIN_COUNT:s->page==PAGE_SETTINGS?SETTING_COUNT:s->page==PAGE_CHEATS?12:s->page==PAGE_BACKUPS?3:s->page==PAGE_GAME_ICONS?5:s->shutdown_countdown?1:2;
 }
 static int lobby_grid_columns(const MenuState *s){return s->online_takeover&&s->lobby_columns>=3?s->lobby_columns:2;}
@@ -770,18 +770,25 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
             s->fav_search_category=(s->fav_search_category+(button==PAD_LEFT?FAV_CAT_COUNT-1:1))%FAV_CAT_COUNT;
             s->selection=0;s->armed=0;return MENU_CHANGED;
         }
+        if(s->selection==1&&(button==PAD_LEFT||button==PAD_RIGHT)){
+            s->fav_carousel_index=(s->fav_carousel_index+(button==PAD_LEFT?FAV_CAROUSEL_COUNT-1:1))%FAV_CAROUSEL_COUNT;
+            s->armed=0;return MENU_CHANGED;
+        }
         if(button!=PAD_A)return MENU_NONE;
         s->armed=0;
         if(s->selection==0){
-            if(s->fav_search_query[0]){s->fav_search_query[0]=0;return MENU_CHANGED;}
             s->fav_search_category=(s->fav_search_category+1)%FAV_CAT_COUNT;return MENU_CHANGED;
         }
-        if(s->selection==count+1){
-            s->page=PAGE_MAIN;if(s->layout_style!=LAYOUT_CLASSIC){s->topbar_tab=TOPBAR_FAVORITES;s->selection=0;}else s->selection=MAIN_RESUME;
+        if(s->selection==1){
+            fav_carousel_apply(s->fav_carousel_index,s->fav_search_query,sizeof(s->fav_search_query));
             return MENU_CHANGED;
         }
-        if(s->selection>=1&&s->selection<=count){
-            int id=ids[s->selection-1];
+        if(s->selection==count+2){
+            s->page=PAGE_MAIN;if(s->layout_style!=LAYOUT_CLASSIC){s->topbar_tab=s->fav_search_mode?TOPBAR_ACTIONS:TOPBAR_FAVORITES;s->selection=0;}else s->selection=MAIN_RESUME;
+            return MENU_CHANGED;
+        }
+        if(s->selection>=2&&s->selection<=count+1){
+            int id=ids[s->selection-2];
             if(s->fav_search_mode)return menu_execute_favorite_item(s,id);
             fav_toggle_pin(s->favorites,&s->favorite_count,id);
             return MENU_FAVORITES_CHANGED;
