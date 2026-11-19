@@ -655,7 +655,7 @@ static void button_icon(HDC dc,int x,int y,int back,int playstation){controller_
 static void dpad_icon(HDC dc,int x,int y,int ps){controller_artwork_draw(dc,x,y,30,30,0,ps);}
 static const wchar_t *menu_overlay_icons_label(int style){return style==OVERLAY_ICONS_PLAYSTATION?L"PlayStation":style==OVERLAY_ICONS_KEYBOARD?L"Keyboard":L"Xbox";}
 static void save_settings(void) {
-    EnterCriticalSection(&lock); int training_setting=menu_training_multiplier(&menu),longevity_setting=career.longevity_requested,ps=menu.playstation_icons,scale=menu_scale(&menu),auto_launch=menu_auto_launch(&menu),guide_enabled=menu_guide_enabled(&menu),startup_popups=menu.startup_popups,skip_splashes=menu.skip_splashes,suppress_online_notices=menu.suppress_online_notices,first_only=menu.first_player_only,include_ui=menu.screenshot_include_ui,mute_background=menu.mute_background,decision_replays=menu.decision_replays,instant_replay=menu.instant_replay,replay_step=menu.replay_step_index,replace_online=menu.replace_online_tab;uint32_t chord=menu_shortcut(&menu); LeaveCriticalSection(&lock);
+    EnterCriticalSection(&lock); int training_setting=menu_training_multiplier(&menu),longevity_setting=career.longevity_requested,ps=menu.playstation_icons,scale=menu_scale(&menu),auto_launch=menu_auto_launch(&menu),guide_enabled=menu_guide_enabled(&menu),startup_popups=menu.startup_popups,skip_splashes=menu.skip_splashes,suppress_online_notices=menu.suppress_online_notices,first_only=menu.first_player_only,include_ui=menu.screenshot_include_ui,mute_background=menu.mute_background,decision_replays=menu.decision_replays,instant_replay=menu.instant_replay,replay_step=menu.replay_step_index,replace_online=menu.replace_online_tab,open_fav_first=menu.open_favorites_first,fav_count=menu.favorite_count,fav_ids[MENU_MAX_FAVORITES];for(int i=0;i<fav_count&&i<MENU_MAX_FAVORITES;++i)fav_ids[i]=menu.favorites[i];uint32_t chord=menu_shortcut(&menu); LeaveCriticalSection(&lock);
     wchar_t value[24];swprintf(value,24,L"0x%08lx",(unsigned long)chord);
     BOOL saved=WritePrivateProfileStringW(L"Menu",L"ButtonIcons",menu_overlay_icons_label(ps),settings_path);
     saved=WritePrivateProfileStringW(L"Menu",L"OpeningShortcut",value,settings_path)&&saved;
@@ -668,6 +668,8 @@ static void save_settings(void) {
     saved=WritePrivateProfileStringW(L"Menu",L"OfferDecisionReplays",decision_replays?L"1":L"0",settings_path)&&saved;
     saved=WritePrivateProfileStringW(L"Menu",L"InstantReplayInFight",instant_replay?L"1":L"0",settings_path)&&saved;
     saved=WritePrivateProfileStringW(L"Menu",L"ReplaceOnlineTabWithParsectagon",replace_online?L"1":L"0",settings_path)&&saved;
+    saved=WritePrivateProfileStringW(L"Menu",L"OpenFavoritesFirst",open_fav_first?L"1":L"0",settings_path)&&saved;
+    {wchar_t fav_buf[256];fav_serialize(fav_ids,fav_count,fav_buf,256);saved=WritePrivateProfileStringW(L"Menu",L"Favorites",fav_buf,settings_path)&&saved;}
     saved=WritePrivateProfileStringW(L"Menu",L"MuteWhenUnfocused",mute_background?L"1":L"0",settings_path)&&saved;
     swprintf(value,24,L"%d",replay_step);saved=WritePrivateProfileStringW(L"Menu",L"ReplayStepIndex",value,settings_path)&&saved;
     saved=WritePrivateProfileStringW(L"Menu",L"IncludeOverlayInScreenshots",include_ui?L"1":L"0",settings_path)&&saved;
@@ -1527,9 +1529,42 @@ static void draw_lobby_dashboard(HDC dc,RECT canvas,const MenuState *state,const
     lobby_age_label(lobby,GetTickCount64(),age,64);
     text(dc,font_small,age,age_rect,lobby->connected?green:muted,DT_RIGHT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
 }
+static void draw_favorite_tab_row(HDC dc, RECT label_rect, RECT control_rect, int i, int focused, const MenuState *state, const OverlayTheme *theme, const int *cheat_states, const int *cheat_enabled, int ko_state) {
+    if (i == state->favorite_count) {
+        text(dc, font_main, state->favorite_count == 0 ? L"+ Add / Search features..." : L"Manage / Search favorites...", label_rect, focused ? RGB(255, 255, 255) : theme->accent, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        wchar_t chip[32];
+        swprintf(chip, 32, state->favorite_count ? L"Edit (%d/%d)" : L"Search", state->favorite_count, MENU_MAX_FAVORITES);
+        value_chip(dc, control_rect, chip, focused, 0);
+        return;
+    }
+    const FavoriteCatalogItem *it = fav_catalog_item(state->favorites[i]);
+    if (!it) return;
+    text(dc, font_main, it->label, label_rect, focused ? RGB(255, 255, 255) : theme->text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    if (it->id == FAV_STAMINA || it->id == FAV_NO_DAMAGE) {
+        int which = it->id == FAV_STAMINA ? LIVE_STAMINA : LIVE_HEALTH;
+        if (cheat_states[which] == LIVE_LAUNCHER) value_chip(dc, control_rect, L"PORTHEON", focused, 0);
+        else if (cheat_states[which] == LIVE_GAME) value_chip(dc, control_rect, L"Game setting", focused, 0);
+        else if (cheat_states[which] == LIVE_WAIT && cheat_enabled[which]) value_chip(dc, control_rect, L"Pending", focused, 0);
+        else toggle_switch(dc, control_rect, cheat_enabled[which], focused);
+    } else if (it->id == FAV_NEXT_HIT_KO) {
+        toggle_switch(dc, control_rect, ko_state == 1, focused);
+    } else if (it->id == FAV_PHOTO_ENTER) {
+        toggle_switch(dc, control_rect, state->photo_active, focused);
+    } else if (it->id == FAV_PHOTO_FREEZE) {
+        toggle_switch(dc, control_rect, state->photo_frozen, focused);
+    } else if (it->id == FAV_SCREENSHOT) {
+        value_chip(dc, control_rect, L"Save PNG", focused, 0);
+    } else if (it->id == FAV_FIGHT_REPORT) {
+        value_chip(dc, control_rect, L"View", focused, 0);
+    } else if (it->id == FAV_RESTART || it->id == FAV_QUIT) {
+        value_chip(dc, control_rect, L"Confirm", focused, 0);
+    } else {
+        value_chip(dc, control_rect, L"Open", focused, 0);
+    }
+}
 static void draw_modern_tab_rows(HDC dc, RECT panel, int start_y, int item_h, int gap, const MenuState *state, const OverlayPreferences *bindings, const OverlayTheme *theme, const int *cheat_states, const int *cheat_enabled, int ko_state) {
     int style = bindings->box_style;
-    int item_count = topbar_tab_rows(state->topbar_tab);
+    int item_count = topbar_tab_rows_for(state);
     int ctrl_w = (panel.right - panel.left) < 460 ? 132 : 156;
     for (int i = 0; i < item_count; ++i) {
         int y = start_y + i * (item_h + gap);
@@ -1542,7 +1577,9 @@ static void draw_modern_tab_rows(HDC dc, RECT panel, int start_y, int item_h, in
         RECT label_rect = { row_rect.left + 16, row_rect.top, row_rect.right - ctrl_w - 16, row_rect.bottom };
         RECT control_rect = { row_rect.right - ctrl_w - 12, row_rect.top + 6, row_rect.right - 12, row_rect.bottom - 6 };
 
-        if (state->topbar_tab == TOPBAR_ACTIONS) {
+        if (state->topbar_tab == TOPBAR_FAVORITES) {
+            draw_favorite_tab_row(dc, label_rect, control_rect, i, focused, state, theme, cheat_states, cheat_enabled, ko_state);
+        } else if (state->topbar_tab == TOPBAR_ACTIONS) {
             const wchar_t *act_items[] = { L"Resume game", L"Take screenshot", L"Restart game...", L"Quit game...", L"Post-fight report..." };
             text(dc, font_main, act_items[i], label_rect, focused ? RGB(255, 255, 255) : theme->text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
             if (i == 0) value_chip(dc, control_rect, L"Back to Octagon", focused, 0);
@@ -1622,8 +1659,8 @@ static void draw_modern_footer(HDC dc, RECT footer, const MenuState *state, cons
 
 static void draw_sideblade_menu(HDC dc, RECT r, const MenuState *state, const OverlayPreferences *bindings, const OverlayTheme *theme, int conflict, int owner_player, int has_owner, const wchar_t *message, const int *cheat_states, const int *cheat_enabled, int ko_state) {
     int ps = state->playstation_icons, style = bindings->box_style;
-    const wchar_t *tabs[] = { L"Actions", L"Lobby", L"Cheats", L"Photo", L"Settings" };
-    const wchar_t *headers[] = { L"QUICK ACTIONS", L"ONLINE LOBBY", L"LIVE CHEATS", L"PHOTO MODE", L"SETTINGS" };
+    const wchar_t *tabs[] = { L"Favorites", L"Actions", L"Lobby", L"Cheats", L"Photo", L"Settings" };
+    const wchar_t *headers[] = { L"PINNED FAVORITES", L"QUICK ACTIONS", L"ONLINE LOBBY", L"LIVE CHEATS", L"PHOTO MODE", L"SETTINGS" };
 
     RECT rail = { 14, 14, 168, r.bottom - 14 };
     row_surface(dc, rail, style, style == 3 ? 16 : 8, theme->surface, theme->border);
@@ -1659,10 +1696,10 @@ static void draw_sideblade_menu(HDC dc, RECT r, const MenuState *state, const Ov
 
 static void draw_bottomdock_menu(HDC dc, RECT r, const MenuState *state, const OverlayPreferences *bindings, const OverlayTheme *theme, int conflict, int owner_player, int has_owner, const wchar_t *message, const int *cheat_states, const int *cheat_enabled, int ko_state) {
     int ps = state->playstation_icons, style = bindings->box_style;
-    const wchar_t *tabs[] = { L"Actions", L"Lobby", L"Cheats", L"Photo", L"Settings" };
-    const wchar_t *headers[] = { L"QUICK MATCH ACTIONS", L"PARSECTAGON LOBBY", L"LIVE CHEATS & LAB", L"PHOTO MODE", L"APPEARANCE & SYSTEM" };
+    const wchar_t *tabs[] = { L"Favorites", L"Actions", L"Lobby", L"Cheats", L"Photo", L"Settings" };
+    const wchar_t *headers[] = { L"PINNED FAVORITES", L"QUICK MATCH ACTIONS", L"PARSECTAGON LOBBY", L"LIVE CHEATS & LAB", L"PHOTO MODE", L"APPEARANCE & SYSTEM" };
 
-    int item_count = topbar_tab_rows(state->topbar_tab);
+    int item_count = topbar_tab_rows_for(state);
     int drawer_w = 640, drawer_h = 44 + item_count * 46 + 44;
     int dock_y = r.bottom - 62;
     RECT drawer = { (r.right - drawer_w) / 2, dock_y - drawer_h - 10, (r.right + drawer_w) / 2, dock_y - 10 };
@@ -1683,7 +1720,7 @@ static void draw_bottomdock_menu(HDC dc, RECT r, const MenuState *state, const O
     text(dc, font_stat_label, L"UFC 6", bn, theme->accent, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
     int visible_tabs = UFC6_ENABLE_LOBBY ? TOPBAR_COUNT : (TOPBAR_COUNT - 1);
-    int tab_x = dock.left + 146, tab_w = UFC6_ENABLE_LOBBY ? 102 : 128;
+    int tab_x = dock.left + 146, tab_w = UFC6_ENABLE_LOBBY ? 84 : 102;
     controller_artwork_draw(dc, tab_x - 34, dock.top + 12, 28, 22, PAD_LB, ps);
     for (int t = 0, slot = 0; t < TOPBAR_COUNT; ++t) {
         if (!UFC6_ENABLE_LOBBY && t == TOPBAR_LOBBY) continue;
@@ -1703,8 +1740,8 @@ static void draw_bottomdock_menu(HDC dc, RECT r, const MenuState *state, const O
 
 static void draw_bento_menu(HDC dc, RECT r, const MenuState *state, const OverlayPreferences *bindings, const OverlayTheme *theme, int conflict, int owner_player, int has_owner, const wchar_t *message, const int *cheat_states, const int *cheat_enabled, int ko_state) {
     int ps = state->playstation_icons, style = bindings->box_style;
-    const wchar_t *tabs[] = { L"Quick Actions", L"Fight Lobby", L"Live Cheats", L"Photo Mode", L"UI & Settings" };
-    const wchar_t *headers[] = { L"QUICK MATCH DASHBOARD", L"ONLINE MATCHMAKING", L"CHEATS & SPARRING", L"CAMERA & FX", L"OVERLAY PRESETS" };
+    const wchar_t *tabs[] = { L"Favorites", L"Quick Actions", L"Fight Lobby", L"Live Cheats", L"Photo Mode", L"UI & Settings" };
+    const wchar_t *headers[] = { L"PINNED FAVORITES", L"QUICK MATCH DASHBOARD", L"ONLINE MATCHMAKING", L"CHEATS & SPARRING", L"CAMERA & FX", L"OVERLAY PRESETS" };
 
     RECT shell = { 16, 16, r.right - 16, r.bottom - 16 };
     row_surface(dc, shell, style, style == 3 ? 20 : 12, theme->surface, theme->border);
@@ -1745,7 +1782,7 @@ static void draw_bento_menu(HDC dc, RECT r, const MenuState *state, const Overla
 
 static void draw_broadcast_menu(HDC dc, RECT r, const MenuState *state, const OverlayPreferences *bindings, const OverlayTheme *theme, int conflict, const wchar_t *message, const int *cheat_states, const int *cheat_enabled, int ko_state) {
     int ps = state->playstation_icons, style = bindings->box_style;
-    const wchar_t *tabs[] = { L"ACT", L"LOBBY", L"CHEATS", L"PHOTO", L"UI" };
+    const wchar_t *tabs[] = { L"FAV", L"ACT", L"LOBBY", L"CHEATS", L"PHOTO", L"UI" };
     RECT card = { 14, 14, r.right - 14, r.bottom - 14 };
     row_surface(dc, card, style, style == 3 ? 12 : 4, theme->surface, theme->border);
     RECT bar = { card.left, card.top + 4, card.left + 5, card.bottom - 4 };
@@ -1757,7 +1794,7 @@ static void draw_broadcast_menu(HDC dc, RECT r, const MenuState *state, const Ov
     controller_artwork_draw(dc, card.right - 76, card.top + 11, 24, 20, PAD_LB, ps);
     controller_artwork_draw(dc, card.right - 46, card.top + 11, 24, 20, PAD_RB, ps);
 
-    int tx = card.left + 16, tw = UFC6_ENABLE_LOBBY ? 96 : 121;
+    int tx = card.left + 16, tw = UFC6_ENABLE_LOBBY ? 80 : 96;
     for (int t = 0, slot = 0; t < TOPBAR_COUNT; ++t) {
         if (!UFC6_ENABLE_LOBBY && t == TOPBAR_LOBBY) continue;
         RECT tb = { tx + slot * (tw + 6), card.top + 44, tx + (slot + 1) * tw + slot * 6, card.top + 72 };
@@ -1774,8 +1811,8 @@ static void draw_broadcast_menu(HDC dc, RECT r, const MenuState *state, const Ov
 
 static void draw_octagon_menu(HDC dc, RECT r, const MenuState *state, const OverlayPreferences *bindings, const OverlayTheme *theme, int conflict, const wchar_t *message, const int *cheat_states, const int *cheat_enabled, int ko_state) {
     int ps = state->playstation_icons;
-    const wchar_t *tabs[] = { L"Actions", L"Lobby", L"Cheats", L"Photo", L"Settings" };
-    const wchar_t *headers[] = { L"OCTAGON ACTIONS", L"FIGHT LOBBY", L"LIVE CHEATS", L"PHOTO & FX", L"UI & SETTINGS" };
+    const wchar_t *tabs[] = { L"Favorites", L"Actions", L"Lobby", L"Cheats", L"Photo", L"Settings" };
+    const wchar_t *headers[] = { L"PINNED FAVORITES", L"OCTAGON ACTIONS", L"FIGHT LOBBY", L"LIVE CHEATS", L"PHOTO & FX", L"UI & SETTINGS" };
 
     RECT hub = { 20, 68, 250, r.bottom - 68 };
     row_surface(dc, hub, 4, 24, theme->surface, theme->accent);
@@ -1785,7 +1822,7 @@ static void draw_octagon_menu(HDC dc, RECT r, const MenuState *state, const Over
 
     for (int t = 0, slot = 0; t < TOPBAR_COUNT; ++t) {
         if (!UFC6_ENABLE_LOBBY && t == TOPBAR_LOBBY) continue;
-        RECT tb = { hub.left + 24, hub.top + 60 + slot * 38, hub.right - 24, hub.top + 92 + slot * 38 };
+        RECT tb = { hub.left + 24, hub.top + 56 + slot * 34, hub.right - 24, hub.top + 86 + slot * 34 };
         int act = (t == state->topbar_tab);
         if (act) row_surface(dc, tb, 4, 8, theme->accent, theme->focus_border);
         text(dc, font_small, tabs[t], tb, act ? RGB(255,255,255) : theme->muted, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
@@ -1832,9 +1869,9 @@ static void draw_topbar_menu(HDC dc, RECT r, const MenuState *state, const Overl
     text(dc, font_small, L"UFC 6 OVERLAY", brand_sub, theme->text, DT_LEFT | DT_TOP | DT_SINGLELINE);
 
     int visible_tabs = UFC6_ENABLE_LOBBY ? TOPBAR_COUNT : (TOPBAR_COUNT - 1);
-    const wchar_t *tab_names[] = { L"Actions ▾", L"Lobby ▾", L"Cheats ▾", L"Photo ▾", L"Settings ▾" };
+    const wchar_t *tab_names[] = { L"Favorites ▾", L"Actions ▾", L"Lobby ▾", L"Cheats ▾", L"Photo ▾", L"Settings ▾" };
     int tab_start_x = bar.left + (is_island ? 202 : 210);
-    int tab_w = is_island ? (UFC6_ENABLE_LOBBY ? 78 : 98) : (UFC6_ENABLE_LOBBY ? 98 : 122);
+    int tab_w = is_island ? (UFC6_ENABLE_LOBBY ? 66 : 80) : (UFC6_ENABLE_LOBBY ? 82 : 98);
     controller_artwork_draw(dc, tab_start_x - 36, bar.top + 13, 30, 24, PAD_LB, ps);
 
     for (int t = 0, slot = 0; t < TOPBAR_COUNT; ++t) {
@@ -1865,7 +1902,7 @@ static void draw_topbar_menu(HDC dc, RECT r, const MenuState *state, const Overl
     int flyout_w = is_island ? 600 : 680;
     int flyout_left = (r.right - flyout_w) / 2;
     int flyout_right = flyout_left + flyout_w;
-    int item_count = topbar_tab_rows(state->topbar_tab);
+    int item_count = topbar_tab_rows_for(state);
     int item_h = 42;
     int header_h = 40;
     int flyout_h = header_h + item_count * (item_h + 8) + 18;
@@ -1873,6 +1910,7 @@ static void draw_topbar_menu(HDC dc, RECT r, const MenuState *state, const Overl
     row_surface(dc, flyout, style, style == 3 ? 20 : 10, theme->surface, theme->border);
 
     const wchar_t *flyout_headers[] = {
+        L"PINNED FAVORITE ACTIONS",
         L"QUICK MATCH ACTIONS",
         L"PARSECTAGON ONLINE MATCHMAKING",
         L"LIVE CHEATS & SPARRING LAB",
@@ -1896,7 +1934,9 @@ static void draw_topbar_menu(HDC dc, RECT r, const MenuState *state, const Overl
         RECT label_rect = { row_rect.left + 18, row_rect.top, row_rect.right - 180, row_rect.bottom };
         RECT control_rect = { row_rect.right - 170, row_rect.top + 6, row_rect.right - 14, row_rect.bottom - 6 };
 
-        if (state->topbar_tab == TOPBAR_ACTIONS) {
+        if (state->topbar_tab == TOPBAR_FAVORITES) {
+            draw_favorite_tab_row(dc, label_rect, control_rect, i, focused, state, theme, cheat_states, cheat_enabled, ko_state);
+        } else if (state->topbar_tab == TOPBAR_ACTIONS) {
             const wchar_t *act_items[] = { L"Resume game", L"Take screenshot", L"Restart game...", L"Quit game...", L"Post-fight report..." };
             text(dc, font_main, act_items[i], label_rect, focused ? RGB(255, 255, 255) : theme->text, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
             if (i == 0) value_chip(dc, control_rect, L"Back to Octagon", focused, 0);
@@ -2097,7 +2137,7 @@ static void draw_menu(HDC dc, RECT r) {
     const wchar_t *avatar_always_labels[]={L"Cancel",state.avatar_mode==2?L"Turn Off and restart":L"Turn On and restart"};
     const wchar_t *lobby_account_labels[]={L"Link or change account",L"Unlink this PC",L"Back"};
     const wchar_t *main_labels[]={L"Resume",L"Take screenshot",L"Restart game",L"Cheats",L"Photo Mode",L"Parsectagon",L"Settings",L"Quit game",L"Restart PC",L"Shut down PC"};
-    const wchar_t *setting_labels[]={L"Overlay button icons",L"Opening shortcut",L"UI scale",L"Launch UFC 6 after PC restart",L"Xbox / Guide button",L"Windows Game Bar shortcut",L"Launcher setup...",L"Controller access",L"Screenshots folder",L"Reset overlay settings...",L"Patch in-game controller icons...",L"Check for updates...",L"Export support report...",L"Keybinds...",L"Theme...",L"Back",L"Font size",L"Box style",L"Window size",L"Visual auto-confirm fallback",L"Skip intros",L"Suppress online notices",L"Include overlay in screenshots",L"Skip title & network warnings...",L"Mute when unfocused",L"Replay after decisions",L"Experimental...",L"Instant Replay in fights",L"Fix career avatar...",L"Image readback always on",L"Master preset",L"Menu layout",L"Backdrop style",L"Replace Online tab with Parsectagon"};
+    const wchar_t *setting_labels[]={L"Overlay button icons",L"Opening shortcut",L"UI scale",L"Launch UFC 6 after PC restart",L"Xbox / Guide button",L"Windows Game Bar shortcut",L"Launcher setup...",L"Controller access",L"Screenshots folder",L"Reset overlay settings...",L"Patch in-game controller icons...",L"Check for updates...",L"Export support report...",L"Keybinds...",L"Theme...",L"Back",L"Font size",L"Box style",L"Window size",L"Visual auto-confirm fallback",L"Skip intros",L"Suppress online notices",L"Include overlay in screenshots",L"Skip title & network warnings...",L"Mute when unfocused",L"Replay after decisions",L"Experimental...",L"Instant Replay in fights",L"Fix career avatar...",L"Image readback always on",L"Master preset",L"Menu layout",L"Backdrop style",L"Replace Online tab with Parsectagon",L"Open Favorites tab first"};
     const wchar_t *photo_labels[]={state.photo_active?L"Continue camera":L"Enter Photo Mode",L"Freeze action",L"Hide HUD",L"Keep cage visible",L"Show controls panel",L"Reset camera",L"Take screenshot",L"Exit Photo Mode",L"Controls...",L"Filters & effects...",L"Watermark...",L"Back"};
     const wchar_t *effect_labels[]={L"Filter",L"Filter strength",L"Exposure",L"Contrast",L"Saturation",L"Warmth",L"Vignette",L"Film grain",L"Cinematic bars",L"Reset effects",L"Back"};
     const wchar_t *mark_labels[]={L"Show watermark",L"Player name",L"Corner",L"Opacity",L"Size",L"Style",L"Font",L"Text color",L"Back"};
@@ -2128,8 +2168,10 @@ static void draw_menu(HDC dc, RECT r) {
         static const wchar_t *category_names[]={L"Appearance",L"Controls",L"Game & launcher",L"Files & support",L"Performance",L"Fighter account",L"Back"};
         static const wchar_t *category_values[]={L"Theme & size",L"Input",L"Startup",L"Files",L"Graphics",L"Parsectagon",L"Return"};
         int section=state.page==PAGE_SETTINGS_HOME?0:state.page==PAGE_APPEARANCE?1:state.page==PAGE_CONTROLS?2:state.page==PAGE_GAME_SETTINGS?3:state.page==PAGE_TOOLS?4:5;
-        const wchar_t *page_title=state.page==PAGE_SETTINGS?L"All settings":state.page==PAGE_THEME?L"Theme":state.page==PAGE_KEYBINDS?L"Keybinds":state.page==PAGE_BINDING?binding_names[state.binding_action]:state.page==PAGE_GAME_ICONS?L"Game input icons":state.page==PAGE_STARTUP?L"Startup screens":state.page==PAGE_PERFORMANCE?L"Performance":state.page==PAGE_CHEATS?L"Cheats":state.page==PAGE_BACKUPS?L"Savegame backups":state.page==PAGE_PHOTO?L"Photo Mode":state.page==PAGE_PHOTO_CONTROLS?L"Photo controls":state.page==PAGE_PHOTO_EFFECTS?L"Filters & effects":state.page==PAGE_PHOTO_WATERMARK?L"Photo watermark":titles[section];
-        const wchar_t *page_description=state.page==PAGE_SETTINGS?L"Browse all overlay and system options":state.page==PAGE_THEME?L"Choose a color preset":state.page==PAGE_KEYBINDS?L"Assign keyboard keys and controller combinations":state.page==PAGE_BINDING?L"Record or clear an input":state.page==PAGE_GAME_ICONS?L"Choose prompts and edit game mappings":state.page==PAGE_STARTUP?L"Manage title and network bypass":state.page==PAGE_PERFORMANCE?L"PORTHEON graphics options; restart to apply":state.page==PAGE_CHEATS?L"Fight and career options for Player 1":state.page==PAGE_BACKUPS?L"Save in UFC 6 before backing up":state.page==PAGE_PHOTO?L"Camera, freeze and capture controls":state.page==PAGE_PHOTO_CONTROLS?L"Close the overlay to control the camera":state.page==PAGE_PHOTO_EFFECTS?L"Adjust effects while Photo Mode is active":state.page==PAGE_PHOTO_WATERMARK?L"Style the name used in screenshots":descriptions[section];
+        const wchar_t *page_title=state.page==PAGE_SETTINGS?L"All settings":state.page==PAGE_THEME?L"Theme":state.page==PAGE_KEYBINDS?L"Keybinds":state.page==PAGE_BINDING?binding_names[state.binding_action]:state.page==PAGE_GAME_ICONS?L"Game input icons":state.page==PAGE_STARTUP?L"Startup screens":state.page==PAGE_PERFORMANCE?L"Performance":state.page==PAGE_CHEATS?L"Cheats":state.page==PAGE_BACKUPS?L"Savegame backups":state.page==PAGE_PHOTO?L"Photo Mode":state.page==PAGE_PHOTO_CONTROLS?L"Photo controls":state.page==PAGE_PHOTO_EFFECTS?L"Filters & effects":state.page==PAGE_PHOTO_WATERMARK?L"Photo watermark":state.page==PAGE_FAVORITE_SEARCH?L"Favorites & search":titles[section];
+        const wchar_t *page_description=state.page==PAGE_SETTINGS?L"Browse all overlay and system options":state.page==PAGE_THEME?L"Choose a color preset":state.page==PAGE_KEYBINDS?L"Assign keyboard keys and controller combinations":state.page==PAGE_BINDING?L"Record or clear an input":state.page==PAGE_GAME_ICONS?L"Choose prompts and edit game mappings":state.page==PAGE_STARTUP?L"Manage title and network bypass":state.page==PAGE_PERFORMANCE?L"PORTHEON graphics options; restart to apply":state.page==PAGE_CHEATS?L"Fight and career options for Player 1":state.page==PAGE_BACKUPS?L"Save in UFC 6 before backing up":state.page==PAGE_PHOTO?L"Camera, freeze and capture controls":state.page==PAGE_PHOTO_CONTROLS?L"Close the overlay to control the camera":state.page==PAGE_PHOTO_EFFECTS?L"Adjust effects while Photo Mode is active":state.page==PAGE_PHOTO_WATERMARK?L"Style the name used in screenshots":state.page==PAGE_FAVORITE_SEARCH?L"Filter by category or type to search, press A to pin/unpin":descriptions[section];
+        int fav_ids[FAV_CATALOG_COUNT];
+        int fav_match_count=state.page==PAGE_FAVORITE_SEARCH?fav_filter_items(state.fav_search_category,state.fav_search_query,fav_ids,FAV_CATALOG_COUNT):0;
         RECT panel={24,16,r.right-24,r.bottom-16};
         row_surface(dc,panel,bindings.box_style,bindings.box_style==3?22:12,paint_theme.surface,paint_theme.border);
         RECT eyebrow={50,30,r.right-50,54},heading={50,52,r.right-50,96};
@@ -2149,7 +2191,15 @@ static void draw_menu(HDC dc, RECT r) {
             row_surface(dc,row,bindings.box_style,bindings.box_style==3?18:7,focused?paint_theme.focus:RGB(15,20,28),focused?paint_theme.focus_border:paint_theme.border);
             if(focused){RECT marker={row.left+1,top+7,row.left+4,top+35};HBRUSH b=CreateSolidBrush(paint_theme.accent);FillRect(dc,&marker,b);DeleteObject(b);}
             int id=menu_setting_page(state.page)?menu_setting_id(state.page,i):-1;
-            const wchar_t *label=state.page==PAGE_SETTINGS_HOME?category_names[i]:state.page==PAGE_THEME?theme_choices[i]:state.page==PAGE_KEYBINDS?(i==BIND_COUNT?L"Back":binding_names[i]):state.page==PAGE_BINDING?binding_labels[i]:state.page==PAGE_GAME_ICONS?game_icons_labels[i]:state.page==PAGE_STARTUP?startup_labels[i]:state.page==PAGE_PERFORMANCE?performance_labels[i]:state.page==PAGE_CHEATS?cheat_labels[i]:state.page==PAGE_BACKUPS?backup_labels[i]:state.page==PAGE_PHOTO?photo_labels[i]:state.page==PAGE_PHOTO_CONTROLS?photo_control_labels[i]:state.page==PAGE_PHOTO_EFFECTS?effect_labels[i]:state.page==PAGE_PHOTO_WATERMARK?mark_labels[i]:setting_labels[id];
+            wchar_t fav_row_label[96]={0};
+            if(state.page==PAGE_FAVORITE_SEARCH){
+                if(i==0){
+                    if(state.fav_search_query[0]){wchar_t q[36]={0};for(int k=0;state.fav_search_query[k]&&k<31;++k)q[k]=(wchar_t)(unsigned char)state.fav_search_query[k];swprintf(fav_row_label,96,L"Filter: \"%ls\"",q);}
+                    else wcscpy(fav_row_label,L"Category / Type to search");
+                }else if(i==fav_match_count+1)wcscpy(fav_row_label,L"Back to Favorites");
+                else{const FavoriteCatalogItem *it=fav_catalog_item(fav_ids[i-1]);if(it)wcscpy(fav_row_label,it->label);}
+            }
+            const wchar_t *label=state.page==PAGE_FAVORITE_SEARCH?fav_row_label:state.page==PAGE_SETTINGS_HOME?category_names[i]:state.page==PAGE_THEME?theme_choices[i]:state.page==PAGE_KEYBINDS?(i==BIND_COUNT?L"Back":binding_names[i]):state.page==PAGE_BINDING?binding_labels[i]:state.page==PAGE_GAME_ICONS?game_icons_labels[i]:state.page==PAGE_STARTUP?startup_labels[i]:state.page==PAGE_PERFORMANCE?performance_labels[i]:state.page==PAGE_CHEATS?cheat_labels[i]:state.page==PAGE_BACKUPS?backup_labels[i]:state.page==PAGE_PHOTO?photo_labels[i]:state.page==PAGE_PHOTO_CONTROLS?photo_control_labels[i]:state.page==PAGE_PHOTO_EFFECTS?effect_labels[i]:state.page==PAGE_PHOTO_WATERMARK?mark_labels[i]:setting_labels[id];
             RECT label_box={row.left+18,top+2,row.right-270,top+40};
             text(dc,font_main,label,label_box,focused?RGB(255,255,255):paint_theme.text,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
             RECT control={row.right-258,top+6,row.right-14,top+36};
@@ -2168,6 +2218,7 @@ static void draw_menu(HDC dc, RECT r) {
                 else if(state.page==PAGE_PHOTO_CONTROLS)special=i==11?L"Back":L"Guide";
                 else if(state.page==PAGE_PHOTO_EFFECTS){if(i<FX_RESET){photo_effect_value(&state.effects,i,detail,80);special=detail;special_arrows=1;}else special=i==FX_RESET?L"Reset":L"Back";}
                 else if(state.page==PAGE_PHOTO_WATERMARK){if(i==MARK_ENABLED)special_toggle=state.effects.watermark&&state.effects.name[0];else if(i<MARK_BACK){special=photo_mark_value(&state.effects,i,detail,80);special_arrows=i!=MARK_NAME;}else special=L"Back";}
+                else if(state.page==PAGE_FAVORITE_SEARCH){if(i==0){special=fav_category_names[state.fav_search_category];special_arrows=1;}else if(i==fav_match_count+1)special=L"Back";else{int pinned=fav_is_pinned(state.favorites,state.favorite_count,fav_ids[i-1]);special=pinned?L"Pinned":state.favorite_count>=MENU_MAX_FAVORITES?L"Full (5/5)":L"Pin";}}
                 if(special_toggle>=0)toggle_switch(dc,control,special_toggle,focused);else value_chip(dc,control,special,focused,special_arrows);
                 continue;
             }
@@ -2189,6 +2240,7 @@ static void draw_menu(HDC dc, RECT r) {
                 case SETTING_AUDIO_FOCUS:toggle=state.mute_background;break;
                 case SETTING_DECISION_REPLAY:toggle=state.decision_replays;break;
                 case SETTING_REPLACE_ONLINE:toggle=state.replace_online_tab;break;
+                case SETTING_FAVORITES_FIRST:toggle=state.open_favorites_first;break;
                 case SETTING_INSTANT_REPLAY:toggle=state.instant_replay;break;
                 case SETTING_AVATAR_ALWAYS:toggle=state.avatar_mode==2;break;
                 case SETTING_MASTER_PRESET:value=master_preset_names[state.master_preset];arrows=1;break;
@@ -2682,6 +2734,8 @@ static void reset_overlay_settings(void){
     menu.decision_replays=GetPrivateProfileIntW(L"Menu",L"OfferDecisionReplays",0,settings_path)!=0;
     menu.instant_replay=GetPrivateProfileIntW(L"Menu",L"InstantReplayInFight",0,settings_path)!=0;
     menu.replace_online_tab=GetPrivateProfileIntW(L"Menu",L"ReplaceOnlineTabWithParsectagon",1,settings_path)!=0;
+    menu.open_favorites_first=GetPrivateProfileIntW(L"Menu",L"OpenFavoritesFirst",0,settings_path)!=0;
+    {wchar_t fav_buf[256]={0};GetPrivateProfileStringW(L"Menu",L"Favorites",L"",fav_buf,256,settings_path);fav_deserialize(fav_buf,menu.favorites,&menu.favorite_count);}
     menu.avatar_mode=avatar_readback_mode(performance_bin);
     if(menu.avatar_mode<0)menu.avatar_mode=AVATAR_READBACK_OFF;
     menu.mute_background=GetPrivateProfileIntW(L"Menu",L"MuteWhenUnfocused",0,settings_path)!=0;
@@ -3120,6 +3174,23 @@ static void tick(void) {
     int f10 = (GetAsyncKeyState(VK_F10) & 0x8000) != 0;
     int tab_key_down=((GetAsyncKeyState('Q')|GetAsyncKeyState('E'))&0x8000)!=0;
     static int tab_key_was_down;
+    static unsigned char fav_key_was[256];
+    if(active&&menu.visible&&menu.page==PAGE_FAVORITE_SEARCH){
+        int changed=0;
+        EnterCriticalSection(&lock);
+        for(int k=0;k<256;++k){
+            int is_char=(k>='A'&&k<='Z')||(k>='0'&&k<='9')||k==VK_SPACE||k==VK_BACK;
+            if(!is_char)continue;
+            int down=(GetAsyncKeyState(k)&0x8000)!=0;
+            if(down&&!fav_key_was[k]){
+                int ch=k==VK_BACK?'\b':k==VK_SPACE?' ':(k>='A'&&k<='Z')?(k+('a'-'A')):k;
+                if(menu_favorite_search_char(&menu,ch))changed=1;
+            }
+            fav_key_was[k]=(unsigned char)down;
+        }
+        LeaveCriticalSection(&lock);
+        if(changed)PostThreadMessageW(ui_thread,WM_MENU_ACTION,MENU_CHANGED,0);
+    }else{memset(fav_key_was,0,sizeof(fav_key_was));}
     static int mouse_was_down;int mouse_down=!!(GetAsyncKeyState(VK_LBUTTON)&0x8000);
     static POINT last_mouse_cursor;POINT mouse_cursor={0,0};int mouse_valid=active&&GetCursorPos(&mouse_cursor);
     int mouse_clicked=mouse_valid&&mouse_down&&!mouse_was_down;
@@ -3345,6 +3416,8 @@ static DWORD WINAPI worker(void *unused) {
     menu.decision_replays=GetPrivateProfileIntW(L"Menu",L"OfferDecisionReplays",0,settings_path)!=0;
     menu.instant_replay=GetPrivateProfileIntW(L"Menu",L"InstantReplayInFight",0,settings_path)!=0;
     menu.replace_online_tab=GetPrivateProfileIntW(L"Menu",L"ReplaceOnlineTabWithParsectagon",1,settings_path)!=0;
+    menu.open_favorites_first=GetPrivateProfileIntW(L"Menu",L"OpenFavoritesFirst",0,settings_path)!=0;
+    {wchar_t fav_buf[256]={0};GetPrivateProfileStringW(L"Menu",L"Favorites",L"",fav_buf,256,settings_path);fav_deserialize(fav_buf,menu.favorites,&menu.favorite_count);}
     menu.mute_background=GetPrivateProfileIntW(L"Menu",L"MuteWhenUnfocused",0,settings_path)!=0;
     menu.replay_step_index=GetPrivateProfileIntW(L"Menu",L"ReplayStepIndex",0,settings_path);if(menu.replay_step_index<0||menu.replay_step_index>6)menu.replay_step_index=0;
     photo_effects_load(&menu.effects,settings_path);
@@ -3600,6 +3673,8 @@ static DWORD WINAPI worker(void *unused) {
             }
             else if(msg.wParam==MENU_INSTANT_REPLAY_CHANGED){save_settings();status(menu.instant_replay?L"Instant Replay On for new offline fights.":L"Instant Replay Off for new fights.");}
             else if(msg.wParam==MENU_REPLACE_ONLINE_CHANGED){save_settings();status(menu.replace_online_tab?L"Parsectagon opens on the Online tab.":L"UFC 6 Online tab restored. F10 > Parsectagon remains available.");}
+            else if(msg.wParam==MENU_FAVORITES_CHANGED){save_settings();status(L"Favorites updated.");}
+            else if(msg.wParam==MENU_FAVORITES_FIRST_CHANGED){save_settings();status(menu.open_favorites_first?L"Overlay will open on Favorites first.":L"Overlay will open on Actions first.");}
             else if(msg.wParam==MENU_AVATAR_REPAIR_START)avatar_change_mode(AVATAR_READBACK_REPAIR);
             else if(msg.wParam==MENU_AVATAR_REPAIR_FINISH)avatar_change_mode(AVATAR_READBACK_OFF);
             else if(msg.wParam==MENU_AVATAR_ALWAYS_CHANGED){

@@ -9,6 +9,7 @@
 #include "photo_effects.h"
 #include "photo_presets.h"
 #include "performance_settings.h"
+#include "menu_favorites.h"
 
 enum {
     PAD_MENU=0x8, PAD_UP=0x10, PAD_RIGHT=0x20, PAD_DOWN=0x40, PAD_LEFT=0x80,
@@ -17,16 +18,16 @@ enum {
     SHORTCUT_BUTTONS=0x0000fcfe
 };
 enum { OVERLAY_ICONS_XBOX, OVERLAY_ICONS_PLAYSTATION, OVERLAY_ICONS_KEYBOARD };
-enum { PAGE_MAIN, PAGE_SETTINGS, PAGE_RESTART, PAGE_SHUTDOWN, PAGE_REBOOT, PAGE_SCREENSHOT, PAGE_RESET, PAGE_CHEATS, PAGE_CAREER_ADD, PAGE_GAME_ICONS, PAGE_GAME_ICONS_CONFIRM, PAGE_BACKUPS, PAGE_KEYBINDS, PAGE_BINDING, PAGE_THEME, PAGE_QUIT, PAGE_SETTINGS_HOME, PAGE_APPEARANCE, PAGE_CONTROLS, PAGE_GAME_SETTINGS, PAGE_TOOLS, PAGE_PHOTO, PAGE_PHOTO_CONTROLS, PAGE_PHOTO_EFFECTS, PAGE_PHOTO_WATERMARK, PAGE_PERFORMANCE, PAGE_PERFORMANCE_RESTART, PAGE_PERFORMANCE_DISCARD, PAGE_STARTUP, PAGE_STARTUP_CONFIRM, PAGE_EXPERIMENTAL, PAGE_WELCOME, PAGE_AVATAR_REPAIR, PAGE_AVATAR_ALWAYS, PAGE_LOBBY, PAGE_LOBBY_ACCOUNT, PAGE_LOBBY_HOME, PAGE_STREAM_PRESETS, PAGE_HOST_FIGHT, PAGE_FIGHT_REPORT };
+enum { PAGE_MAIN, PAGE_SETTINGS, PAGE_RESTART, PAGE_SHUTDOWN, PAGE_REBOOT, PAGE_SCREENSHOT, PAGE_RESET, PAGE_CHEATS, PAGE_CAREER_ADD, PAGE_GAME_ICONS, PAGE_GAME_ICONS_CONFIRM, PAGE_BACKUPS, PAGE_KEYBINDS, PAGE_BINDING, PAGE_THEME, PAGE_QUIT, PAGE_SETTINGS_HOME, PAGE_APPEARANCE, PAGE_CONTROLS, PAGE_GAME_SETTINGS, PAGE_TOOLS, PAGE_PHOTO, PAGE_PHOTO_CONTROLS, PAGE_PHOTO_EFFECTS, PAGE_PHOTO_WATERMARK, PAGE_PERFORMANCE, PAGE_PERFORMANCE_RESTART, PAGE_PERFORMANCE_DISCARD, PAGE_STARTUP, PAGE_STARTUP_CONFIRM, PAGE_EXPERIMENTAL, PAGE_WELCOME, PAGE_AVATAR_REPAIR, PAGE_AVATAR_ALWAYS, PAGE_LOBBY, PAGE_LOBBY_ACCOUNT, PAGE_LOBBY_HOME, PAGE_STREAM_PRESETS, PAGE_HOST_FIGHT, PAGE_FIGHT_REPORT, PAGE_FAVORITE_SEARCH };
 enum { MAIN_RESUME, MAIN_SCREENSHOT, MAIN_RESTART, MAIN_CHEATS, MAIN_PHOTO, MAIN_LOBBY, MAIN_SETTINGS, MAIN_QUIT, MAIN_REBOOT, MAIN_SHUTDOWN, MAIN_COUNT };
-enum { SETTING_ICONS, SETTING_SHORTCUT, SETTING_SCALE, SETTING_AUTO_LAUNCH, SETTING_GUIDE, SETTING_GAMEBAR, SETTING_LAUNCHER, SETTING_ACCESS, SETTING_SCREENSHOTS, SETTING_RESET, SETTING_GAME_ICONS, SETTING_UPDATE, SETTING_DIAGNOSTICS, SETTING_KEYBINDS, SETTING_THEME, SETTING_BACK, SETTING_FONT, SETTING_BOX_STYLE, SETTING_WINDOW_SIZE, SETTING_STARTUP_POPUPS, SETTING_SKIP_SPLASHES, SETTING_SUPPRESS_ONLINE_NOTICES, SETTING_SCREENSHOT_UI, SETTING_STARTUP_PATCH, SETTING_AUDIO_FOCUS, SETTING_DECISION_REPLAY, SETTING_EXPERIMENTAL, SETTING_INSTANT_REPLAY, SETTING_AVATAR_REPAIR, SETTING_AVATAR_ALWAYS, SETTING_MASTER_PRESET, SETTING_LAYOUT_STYLE, SETTING_BACKDROP_STYLE, SETTING_REPLACE_ONLINE, SETTING_COUNT };
+enum { SETTING_ICONS, SETTING_SHORTCUT, SETTING_SCALE, SETTING_AUTO_LAUNCH, SETTING_GUIDE, SETTING_GAMEBAR, SETTING_LAUNCHER, SETTING_ACCESS, SETTING_SCREENSHOTS, SETTING_RESET, SETTING_GAME_ICONS, SETTING_UPDATE, SETTING_DIAGNOSTICS, SETTING_KEYBINDS, SETTING_THEME, SETTING_BACK, SETTING_FONT, SETTING_BOX_STYLE, SETTING_WINDOW_SIZE, SETTING_STARTUP_POPUPS, SETTING_SKIP_SPLASHES, SETTING_SUPPRESS_ONLINE_NOTICES, SETTING_SCREENSHOT_UI, SETTING_STARTUP_PATCH, SETTING_AUDIO_FOCUS, SETTING_DECISION_REPLAY, SETTING_EXPERIMENTAL, SETTING_INSTANT_REPLAY, SETTING_AVATAR_REPAIR, SETTING_AVATAR_ALWAYS, SETTING_MASTER_PRESET, SETTING_LAYOUT_STYLE, SETTING_BACKDROP_STYLE, SETTING_REPLACE_ONLINE, SETTING_FAVORITES_FIRST, SETTING_COUNT };
 enum { MENU_NONE, MENU_OPEN, MENU_RESUME, MENU_QUIT, MENU_CHANGED,
        MENU_STYLE_CHANGED, MENU_SHORTCUT_CHANGED, MENU_SCREENSHOT, MENU_RESTART, MENU_SHUTDOWN, MENU_SCALE_CHANGED, MENU_REBOOT, MENU_AUTO_LAUNCH_CHANGED, MENU_GUIDE_CHANGED, MENU_GAMEBAR_CHANGED, MENU_LAUNCHER_SETTINGS, MENU_ACCESS_CHANGED, MENU_OPEN_SCREENSHOTS, MENU_RESET_SETTINGS, MENU_CHEAT_STAMINA, MENU_CHEAT_HEALTH, MENU_CAREER_ADD, MENU_GAME_ICONS_OPEN, MENU_GAME_ICONS_APPLY, MENU_BACKUP_CREATE, MENU_BACKUP_FOLDER, MENU_BACKUP_OPEN, MENU_CHECK_UPDATES, MENU_EXPORT_DIAGNOSTICS, MENU_CAREER_LONGEVITY, MENU_TRAINING_MULTIPLIER, MENU_BIND_KEY_CAPTURE, MENU_BIND_CLEAR_KEY, MENU_BIND_CLEAR_PAD, MENU_BIND_PAD_CHANGED, MENU_THEME_CHANGED, MENU_FONT_CHANGED, MENU_BOX_STYLE_CHANGED, MENU_WINDOW_SIZE_CHANGED, MENU_LAYOUT_STYLE_CHANGED, MENU_BACKDROP_STYLE_CHANGED, MENU_MASTER_PRESET_CHANGED, MENU_STARTUP_CHANGED, MENU_ONLINE_NOTICES_CHANGED, MENU_PHOTO_ENTER, MENU_PHOTO_FREEZE, MENU_PHOTO_RESET, MENU_PHOTO_EXIT, MENU_PHOTO_HUD, MENU_PHOTO_CAGE, MENU_PHOTO_HELP, MENU_SCREENSHOT_OVERLAY, MENU_PHOTO_EFFECTS_CHANGED, MENU_SCREENSHOT_UI_CHANGED, MENU_PERFORMANCE_OPEN, MENU_PERFORMANCE_SAVE, MENU_PERFORMANCE_RESTART, MENU_STARTUP_PATCH_OPEN, MENU_STARTUP_PATCH_APPLY, MENU_AUDIO_FOCUS_CHANGED, MENU_NEXT_HIT_KO, MENU_DECISION_REPLAY_CHANGED, MENU_INSTANT_REPLAY_CHANGED, MENU_WELCOME_DONE, MENU_AVATAR_REPAIR_START, MENU_AVATAR_REPAIR_FINISH, MENU_AVATAR_ALWAYS_CHANGED, MENU_LOBBY_OPEN_ROOM, MENU_LOBBY_REFRESH };
 
-enum { TOPBAR_ACTIONS, TOPBAR_LOBBY, TOPBAR_CHEATS, TOPBAR_PHOTO, TOPBAR_SETTINGS, TOPBAR_COUNT };
+enum { TOPBAR_FAVORITES, TOPBAR_ACTIONS, TOPBAR_LOBBY, TOPBAR_CHEATS, TOPBAR_PHOTO, TOPBAR_SETTINGS, TOPBAR_COUNT };
 
 enum { MENU_LOBBY_FILTER_CHANGED=MENU_LOBBY_REFRESH+1, MENU_FIGHT_EXPORT, MENU_GAME_ICONS_EDIT, MENU_LOBBY_LINK, MENU_LOBBY_UNLINK, MENU_STREAM_PRESET_APPLY, MENU_HOST_ROOM_PUBLISH };
-enum { MENU_REPLACE_ONLINE_CHANGED=MENU_HOST_ROOM_PUBLISH+1, MENU_FIGHT_REPORT_OPEN, MENU_FIGHT_REPORT_RETRY, MENU_FIGHT_REPORT_REFRESH };
+enum { MENU_REPLACE_ONLINE_CHANGED=MENU_HOST_ROOM_PUBLISH+1, MENU_FIGHT_REPORT_OPEN, MENU_FIGHT_REPORT_RETRY, MENU_FIGHT_REPORT_REFRESH, MENU_FAVORITES_CHANGED, MENU_FAVORITES_FIRST_CHANGED };
 
 typedef struct {
     int visible,selection,armed,chord_latched,draining;
@@ -53,6 +54,8 @@ typedef struct {
     int first_player_only;
     int career_amount_index[2],career_kind,game_icons_style,game_icons_from_overlay_change,game_icons_return_page,game_icons_return_selection,training_multiplier_index,startup_patch_enable;
     int binding_action,key_capturing,capture_target,theme_selection,font_index,box_style,window_size,settings_legacy,layout_style,backdrop_style,master_preset,topbar_tab;uint32_t assigned_chord;
+    int favorites[MENU_MAX_FAVORITES],favorite_count,open_favorites_first,fav_search_category;
+    char fav_search_query[32];
 } MenuState;
 
 static inline int menu_replay_step_ms(const MenuState *s){static const int steps[]={10,25,50,100,250,500,1000};return steps[s->replay_step_index>=0&&s->replay_step_index<7?s->replay_step_index:0];}
@@ -82,11 +85,11 @@ static uint32_t menu_career_amount(const MenuState *s,int kind){
 static int menu_training_multiplier(const MenuState *s){static const int values[]={1,2,5,10};return values[s->training_multiplier_index>=0&&s->training_multiplier_index<4?s->training_multiplier_index:0];}
 static int menu_career_row(int kind){return kind==5?9:3+kind;}
 static int menu_setting_page(int page){return page==PAGE_SETTINGS||page==PAGE_APPEARANCE||page==PAGE_CONTROLS||page==PAGE_GAME_SETTINGS||page==PAGE_TOOLS||page==PAGE_EXPERIMENTAL;}
-static int menu_modern_settings_page(const MenuState *s){return s->layout_style!=LAYOUT_CLASSIC&&(s->page==PAGE_SETTINGS||s->page==PAGE_SETTINGS_HOME||s->page==PAGE_APPEARANCE||s->page==PAGE_CONTROLS||s->page==PAGE_GAME_SETTINGS||s->page==PAGE_TOOLS||s->page==PAGE_EXPERIMENTAL||s->page==PAGE_THEME||s->page==PAGE_KEYBINDS||s->page==PAGE_BINDING||s->page==PAGE_GAME_ICONS||s->page==PAGE_STARTUP||s->page==PAGE_PERFORMANCE||s->page==PAGE_CHEATS||s->page==PAGE_BACKUPS||s->page==PAGE_PHOTO||s->page==PAGE_PHOTO_CONTROLS||s->page==PAGE_PHOTO_EFFECTS||s->page==PAGE_PHOTO_WATERMARK);}
+static int menu_modern_settings_page(const MenuState *s){return s->layout_style!=LAYOUT_CLASSIC&&(s->page==PAGE_SETTINGS||s->page==PAGE_SETTINGS_HOME||s->page==PAGE_APPEARANCE||s->page==PAGE_CONTROLS||s->page==PAGE_GAME_SETTINGS||s->page==PAGE_TOOLS||s->page==PAGE_EXPERIMENTAL||s->page==PAGE_THEME||s->page==PAGE_KEYBINDS||s->page==PAGE_BINDING||s->page==PAGE_GAME_ICONS||s->page==PAGE_STARTUP||s->page==PAGE_PERFORMANCE||s->page==PAGE_CHEATS||s->page==PAGE_BACKUPS||s->page==PAGE_PHOTO||s->page==PAGE_PHOTO_CONTROLS||s->page==PAGE_PHOTO_EFFECTS||s->page==PAGE_PHOTO_WATERMARK||s->page==PAGE_FAVORITE_SEARCH);}
 static int menu_modern_dialog_page(const MenuState *s){return s->layout_style!=LAYOUT_CLASSIC&&(s->page==PAGE_RESTART||s->page==PAGE_SHUTDOWN||s->page==PAGE_REBOOT||s->page==PAGE_SCREENSHOT||s->page==PAGE_RESET||s->page==PAGE_CAREER_ADD||s->page==PAGE_GAME_ICONS_CONFIRM||s->page==PAGE_PERFORMANCE_RESTART||s->page==PAGE_PERFORMANCE_DISCARD||s->page==PAGE_STARTUP_CONFIRM||s->page==PAGE_QUIT||s->page==PAGE_AVATAR_REPAIR||s->page==PAGE_AVATAR_ALWAYS||s->page==PAGE_LOBBY_ACCOUNT);}
 static int menu_modern_welcome_page(const MenuState *s){return s->layout_style!=LAYOUT_CLASSIC&&s->page==PAGE_WELCOME;}
 static int menu_setting_id(int page,int row){
-    static const int appearance[]={SETTING_MASTER_PRESET,SETTING_LAYOUT_STYLE,SETTING_BACKDROP_STYLE,SETTING_THEME,SETTING_SCALE,SETTING_FONT,SETTING_BOX_STYLE,SETTING_WINDOW_SIZE,SETTING_ICONS,SETTING_BACK};
+    static const int appearance[]={SETTING_MASTER_PRESET,SETTING_LAYOUT_STYLE,SETTING_BACKDROP_STYLE,SETTING_THEME,SETTING_SCALE,SETTING_FONT,SETTING_BOX_STYLE,SETTING_WINDOW_SIZE,SETTING_ICONS,SETTING_FAVORITES_FIRST,SETTING_BACK};
     static const int controls[]={SETTING_KEYBINDS,SETTING_GUIDE,SETTING_GAMEBAR,SETTING_ACCESS,SETTING_BACK};
     static const int game[]={SETTING_LAUNCHER,SETTING_AUTO_LAUNCH,SETTING_GAME_ICONS,SETTING_SKIP_SPLASHES,SETTING_SUPPRESS_ONLINE_NOTICES,SETTING_STARTUP_PATCH,SETTING_EXPERIMENTAL,SETTING_AUDIO_FOCUS,SETTING_DECISION_REPLAY,SETTING_REPLACE_ONLINE,SETTING_BACK};
     static const int tools[]={SETTING_SCREENSHOTS,SETTING_SCREENSHOT_UI,SETTING_UPDATE,SETTING_DIAGNOSTICS,SETTING_RESET,SETTING_BACK};
@@ -96,7 +99,7 @@ static int menu_setting_id(int page,int row){
 static void menu_return_setting(MenuState *s,int id){
     s->page=PAGE_SETTINGS;s->selection=id;s->armed=0;if(s->settings_legacy)return;
     if(id==SETTING_STARTUP_POPUPS||id==SETTING_INSTANT_REPLAY||id==SETTING_AVATAR_REPAIR||id==SETTING_AVATAR_ALWAYS){s->page=PAGE_EXPERIMENTAL;s->selection=id==SETTING_STARTUP_POPUPS?0:id==SETTING_INSTANT_REPLAY?1:id==SETTING_AVATAR_REPAIR?2:3;return;}
-    const int pages[]={PAGE_APPEARANCE,PAGE_CONTROLS,PAGE_GAME_SETTINGS,PAGE_TOOLS},counts[]={9,4,10,5};
+    const int pages[]={PAGE_APPEARANCE,PAGE_CONTROLS,PAGE_GAME_SETTINGS,PAGE_TOOLS},counts[]={10,4,10,5};
     for(int p=0;p<4;++p)for(int i=0;i<counts[p];++i)if(menu_setting_id(pages[p],i)==id){s->page=pages[p];s->selection=i;return;}
     s->page=PAGE_SETTINGS_HOME;s->selection=0;
 }
@@ -109,6 +112,7 @@ static int topbar_next_tab(int current,int dir){
 }
 static int topbar_tab_rows(int tab){
     switch(tab){
+        case TOPBAR_FAVORITES: return 1;
         case TOPBAR_ACTIONS: return 5;
         case TOPBAR_LOBBY: return 4;
         case TOPBAR_CHEATS: return 5;
@@ -116,6 +120,9 @@ static int topbar_tab_rows(int tab){
         case TOPBAR_SETTINGS: return 4;
         default: return 4;
     }
+}
+static int topbar_tab_rows_for(const MenuState *s){
+    return s->topbar_tab==TOPBAR_FAVORITES?(s->favorite_count+1):topbar_tab_rows(s->topbar_tab);
 }
 static void apply_master_preset(MenuState *s,int preset){
     s->master_preset=preset;
@@ -190,10 +197,11 @@ static int next_visible_preset(int current,int backwards){
     for(int i=0;i<count;++i)if(order[i]==current)return order[(i+(backwards?count-1:1))%count];
     return backwards?order[count-1]:order[0];
 }
-static int menu_scroll_page(int page){return page==PAGE_LOBBY||page==PAGE_STARTUP||menu_setting_page(page)||page==PAGE_CHEATS||page==PAGE_KEYBINDS||page==PAGE_THEME||page==PAGE_PHOTO||page==PAGE_PHOTO_CONTROLS||page==PAGE_PHOTO_EFFECTS||page==PAGE_PHOTO_WATERMARK||page==PAGE_PERFORMANCE;}
+static int menu_scroll_page(int page){return page==PAGE_LOBBY||page==PAGE_STARTUP||menu_setting_page(page)||page==PAGE_CHEATS||page==PAGE_KEYBINDS||page==PAGE_THEME||page==PAGE_PHOTO||page==PAGE_PHOTO_CONTROLS||page==PAGE_PHOTO_EFFECTS||page==PAGE_PHOTO_WATERMARK||page==PAGE_PERFORMANCE||page==PAGE_FAVORITE_SEARCH;}
 static int menu_rows(const MenuState *s) {
-    if(s->page==PAGE_MAIN&&s->layout_style!=LAYOUT_CLASSIC)return topbar_tab_rows(s->topbar_tab);
-    return s->page==PAGE_FIGHT_REPORT?4:s->page==PAGE_LOBBY_HOME?8:s->page==PAGE_STREAM_PRESETS?5:s->page==PAGE_HOST_FIGHT?7:s->page==PAGE_LOBBY?8+s->lobby_room_count:s->page==PAGE_LOBBY_ACCOUNT?3:s->page==PAGE_WELCOME?1:s->page==PAGE_STARTUP?3:s->page==PAGE_STARTUP_CONFIRM||s->page==PAGE_AVATAR_REPAIR||s->page==PAGE_AVATAR_ALWAYS?2:s->page==PAGE_PERFORMANCE?PERF_ROWS:s->page==PAGE_PERFORMANCE_RESTART||s->page==PAGE_PERFORMANCE_DISCARD?2:s->page==PAGE_PHOTO_EFFECTS?FX_ROWS:s->page==PAGE_PHOTO_WATERMARK?MARK_ROWS:s->page==PAGE_PHOTO?12:s->page==PAGE_PHOTO_CONTROLS?12:s->page==PAGE_SETTINGS_HOME?7:s->page==PAGE_APPEARANCE?10:s->page==PAGE_CONTROLS?5:s->page==PAGE_GAME_SETTINGS?11:s->page==PAGE_TOOLS?6:s->page==PAGE_EXPERIMENTAL?5:s->page==PAGE_KEYBINDS?11:s->page==PAGE_BINDING?5:s->page==PAGE_THEME?7:s->page==PAGE_MAIN?MAIN_COUNT:s->page==PAGE_SETTINGS?SETTING_COUNT:s->page==PAGE_CHEATS?12:s->page==PAGE_BACKUPS?3:s->page==PAGE_GAME_ICONS?5:s->shutdown_countdown?1:2;
+    if(s->page==PAGE_MAIN&&s->layout_style!=LAYOUT_CLASSIC)return topbar_tab_rows_for(s);
+    if(s->page==PAGE_FAVORITE_SEARCH){int ids[FAV_CATALOG_COUNT];return 2+fav_filter_items(s->fav_search_category,s->fav_search_query,ids,FAV_CATALOG_COUNT);}
+    return s->page==PAGE_FIGHT_REPORT?4:s->page==PAGE_LOBBY_HOME?8:s->page==PAGE_STREAM_PRESETS?5:s->page==PAGE_HOST_FIGHT?7:s->page==PAGE_LOBBY?8+s->lobby_room_count:s->page==PAGE_LOBBY_ACCOUNT?3:s->page==PAGE_WELCOME?1:s->page==PAGE_STARTUP?3:s->page==PAGE_STARTUP_CONFIRM||s->page==PAGE_AVATAR_REPAIR||s->page==PAGE_AVATAR_ALWAYS?2:s->page==PAGE_PERFORMANCE?PERF_ROWS:s->page==PAGE_PERFORMANCE_RESTART||s->page==PAGE_PERFORMANCE_DISCARD?2:s->page==PAGE_PHOTO_EFFECTS?FX_ROWS:s->page==PAGE_PHOTO_WATERMARK?MARK_ROWS:s->page==PAGE_PHOTO?12:s->page==PAGE_PHOTO_CONTROLS?12:s->page==PAGE_SETTINGS_HOME?7:s->page==PAGE_APPEARANCE?11:s->page==PAGE_CONTROLS?5:s->page==PAGE_GAME_SETTINGS?11:s->page==PAGE_TOOLS?6:s->page==PAGE_EXPERIMENTAL?5:s->page==PAGE_KEYBINDS?11:s->page==PAGE_BINDING?5:s->page==PAGE_THEME?7:s->page==PAGE_MAIN?MAIN_COUNT:s->page==PAGE_SETTINGS?SETTING_COUNT:s->page==PAGE_CHEATS?12:s->page==PAGE_BACKUPS?3:s->page==PAGE_GAME_ICONS?5:s->shutdown_countdown?1:2;
 }
 static int lobby_grid_columns(const MenuState *s){return s->online_takeover&&s->lobby_columns>=3?s->lobby_columns:2;}
 static int lobby_columns_for_viewport(uint32_t width){return width>=2200?4:width>=1700?3:2;}
@@ -247,6 +255,7 @@ static void menu_cancel_shutdown(MenuState *s) {
 }
 static void menu_show(MenuState *s) {
     s->visible=1;s->page=PAGE_MAIN;s->selection=MAIN_RESUME;s->armed=0;s->online_takeover=0;s->lobby_columns=0;s->lobby_from_main=0;
+    if(s->layout_style!=LAYOUT_CLASSIC){s->topbar_tab=s->open_favorites_first?TOPBAR_FAVORITES:TOPBAR_ACTIONS;s->selection=0;}
     s->capturing=0;s->key_capturing=0;s->capture_error=0;
     menu_cancel_shutdown(s);
 }
@@ -337,6 +346,7 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
         if(s->page==PAGE_SETTINGS_HOME){if(s->online_takeover){s->page=PAGE_LOBBY_HOME;s->selection=6;s->armed=0;return MENU_CHANGED;}s->page=PAGE_MAIN;s->selection=MAIN_SETTINGS;if(s->layout_style!=LAYOUT_CLASSIC){s->topbar_tab=TOPBAR_SETTINGS;s->selection=0;}s->armed=0;return MENU_CHANGED;}
         if(s->page==PAGE_BINDING){s->page=PAGE_KEYBINDS;s->selection=s->binding_action;s->armed=0;return MENU_CHANGED;}
         if(s->page==PAGE_KEYBINDS||s->page==PAGE_THEME){int id=s->page==PAGE_KEYBINDS?SETTING_KEYBINDS:SETTING_THEME;menu_return_setting(s,id);return MENU_CHANGED;}
+        if(s->page==PAGE_FAVORITE_SEARCH){s->page=PAGE_MAIN;if(s->layout_style!=LAYOUT_CLASSIC){s->topbar_tab=TOPBAR_FAVORITES;s->selection=0;}else s->selection=MAIN_RESUME;s->armed=0;return MENU_CHANGED;}
         if(s->page==PAGE_FIGHT_REPORT){s->page=PAGE_MAIN;if(s->layout_style!=LAYOUT_CLASSIC){s->topbar_tab=TOPBAR_ACTIONS;s->selection=4;}else s->selection=MAIN_RESUME;s->armed=0;return MENU_CHANGED;}
         if(s->page==PAGE_QUIT){s->page=PAGE_MAIN;s->selection=MAIN_QUIT;if(s->layout_style!=LAYOUT_CLASSIC){s->topbar_tab=TOPBAR_ACTIONS;s->selection=3;}s->armed=0;return MENU_CHANGED;}
         if(s->page==PAGE_BACKUPS){s->page=PAGE_CHEATS;s->selection=10;s->armed=0;return MENU_CHANGED;}
@@ -651,6 +661,10 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
         if(s->selection==SETTING_AVATAR_REPAIR&&button==PAD_A){s->page=PAGE_AVATAR_REPAIR;s->selection=0;s->armed=0;return MENU_CHANGED;}
         if(s->selection==SETTING_AVATAR_ALWAYS&&button==PAD_A){s->page=PAGE_AVATAR_ALWAYS;s->selection=0;s->armed=0;return MENU_CHANGED;}
         if(s->selection==SETTING_DECISION_REPLAY&&(button==PAD_A||button==PAD_LEFT||button==PAD_RIGHT)){s->decision_replays=!s->decision_replays;return MENU_DECISION_REPLAY_CHANGED;}
+        if(s->selection==SETTING_FAVORITES_FIRST&&(button==PAD_A||button==PAD_LEFT||button==PAD_RIGHT)){
+            s->open_favorites_first=!s->open_favorites_first;
+            return MENU_FAVORITES_FIRST_CHANGED;
+        }
         if(s->selection==SETTING_REPLACE_ONLINE&&(button==PAD_A||button==PAD_LEFT||button==PAD_RIGHT)){
             s->replace_online_tab=!s->replace_online_tab;
             if(!s->replace_online_tab){s->online_takeover=0;s->lobby_columns=0;s->lobby_from_main=0;}
@@ -725,6 +739,29 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
         if(s->selection==1)return menu_close(s,MENU_RESTART);
         s->page=PAGE_MAIN;s->selection=MAIN_RESTART;s->armed=0;return MENU_CHANGED;
     }
+    if(s->page==PAGE_FAVORITE_SEARCH){
+        int ids[FAV_CATALOG_COUNT];
+        int count=fav_filter_items(s->fav_search_category,s->fav_search_query,ids,FAV_CATALOG_COUNT);
+        if(s->selection==0&&(button==PAD_LEFT||button==PAD_RIGHT)){
+            s->fav_search_category=(s->fav_search_category+(button==PAD_LEFT?FAV_CAT_COUNT-1:1))%FAV_CAT_COUNT;
+            s->selection=0;s->armed=0;return MENU_CHANGED;
+        }
+        if(button!=PAD_A)return MENU_NONE;
+        s->armed=0;
+        if(s->selection==0){
+            if(s->fav_search_query[0]){s->fav_search_query[0]=0;return MENU_CHANGED;}
+            s->fav_search_category=(s->fav_search_category+1)%FAV_CAT_COUNT;return MENU_CHANGED;
+        }
+        if(s->selection==count+1){
+            s->page=PAGE_MAIN;if(s->layout_style!=LAYOUT_CLASSIC){s->topbar_tab=TOPBAR_FAVORITES;s->selection=0;}else s->selection=MAIN_RESUME;
+            return MENU_CHANGED;
+        }
+        if(s->selection>=1&&s->selection<=count){
+            fav_toggle_pin(s->favorites,&s->favorite_count,ids[s->selection-1]);
+            return MENU_FAVORITES_CHANGED;
+        }
+        return MENU_NONE;
+    }
     if(s->page==PAGE_FIGHT_REPORT){
         if(s->selection==0)return MENU_FIGHT_REPORT_RETRY;
         if(s->selection==1)return MENU_FIGHT_EXPORT;
@@ -733,6 +770,34 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
     }
     if(s->page==PAGE_MAIN&&s->layout_style!=LAYOUT_CLASSIC){
         switch(s->topbar_tab){
+            case TOPBAR_FAVORITES:
+                if(s->selection==s->favorite_count){
+                    s->page=PAGE_FAVORITE_SEARCH;s->selection=0;s->fav_search_category=FAV_CAT_ALL;s->fav_search_query[0]=0;s->armed=0;return MENU_CHANGED;
+                }
+                if(s->selection>=0&&s->selection<s->favorite_count){
+                    int id=s->favorites[s->selection];s->armed=0;
+                    switch(id){
+                        case FAV_SCREENSHOT: return MENU_SCREENSHOT;
+                        case FAV_FIGHT_REPORT: s->page=PAGE_FIGHT_REPORT;s->selection=0;return MENU_FIGHT_REPORT_OPEN;
+                        case FAV_RESTART: s->page=PAGE_RESTART;s->selection=0;return MENU_CHANGED;
+                        case FAV_QUIT: s->page=PAGE_QUIT;s->selection=0;return MENU_CHANGED;
+                        case FAV_STAMINA: return MENU_CHEAT_STAMINA;
+                        case FAV_NO_DAMAGE: return MENU_CHEAT_HEALTH;
+                        case FAV_NEXT_HIT_KO: return MENU_NEXT_HIT_KO;
+                        case FAV_CAREER_CHEATS: s->page=PAGE_CHEATS;s->selection=0;return MENU_CHANGED;
+                        case FAV_SAVE_BACKUPS: s->page=PAGE_BACKUPS;s->selection=0;return MENU_BACKUP_OPEN;
+                        case FAV_PHOTO_ENTER: s->page=PAGE_PHOTO;s->selection=0;return MENU_CHANGED;
+                        case FAV_PHOTO_FREEZE: return MENU_PHOTO_FREEZE;
+                        case FAV_PHOTO_FX: s->page=PAGE_PHOTO_EFFECTS;s->selection=0;return MENU_CHANGED;
+                        case FAV_PHOTO_WATERMARK: s->page=PAGE_PHOTO_WATERMARK;s->selection=0;return MENU_CHANGED;
+                        case FAV_APPEARANCE: s->page=PAGE_APPEARANCE;s->selection=0;return MENU_CHANGED;
+                        case FAV_CONTROLS: s->page=PAGE_CONTROLS;s->selection=0;return MENU_CHANGED;
+                        case FAV_GAME_SETTINGS: s->page=PAGE_GAME_SETTINGS;s->selection=0;return MENU_CHANGED;
+                        case FAV_PERFORMANCE: s->page=PAGE_PERFORMANCE;s->selection=0;return MENU_PERFORMANCE_OPEN;
+                        case FAV_TOOLS: s->page=PAGE_TOOLS;s->selection=0;return MENU_CHANGED;
+                    }
+                }
+                break;
             case TOPBAR_ACTIONS:
                 if(s->selection==0)return menu_close(s,MENU_RESUME);
                 if(s->selection==1)return MENU_SCREENSHOT;
@@ -793,5 +858,16 @@ static int menu_lobby_stick(MenuState *s,uint32_t direction){
         return MENU_NONE;
     }
     return menu_button(s,direction,1);
+}
+static int menu_favorite_search_char(MenuState *s,int ch){
+    if(!s->visible||s->page!=PAGE_FAVORITE_SEARCH)return 0;
+    size_t len=0;while(s->fav_search_query[len]&&len+1<sizeof(s->fav_search_query))++len;
+    if(ch=='\b'){if(len==0)return 0;s->fav_search_query[len-1]=0;s->selection=0;return 1;}
+    if((ch>='a'&&ch<='z')||(ch>='A'&&ch<='Z')||(ch>='0'&&ch<='9')||ch==' '){
+        if(len+1>=sizeof(s->fav_search_query))return 0;
+        if(ch==' '&&len==0)return 0;
+        s->fav_search_query[len]=(char)ch;s->fav_search_query[len+1]=0;s->selection=0;return 1;
+    }
+    return 0;
 }
 #endif

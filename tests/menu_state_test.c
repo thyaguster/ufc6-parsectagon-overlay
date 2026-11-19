@@ -399,10 +399,22 @@ int main(void) {
     assert(menu_rows(&s)==4);
     assert(menu_button(&s,PAD_A,1)==MENU_MASTER_PRESET_CHANGED&&s.layout_style==LAYOUT_TOPBAR&&s.master_preset==PRESET_APEX);
     s.page=PAGE_APPEARANCE;s.selection=0;s.armed=1;
-    assert(menu_rows(&s)==10&&menu_setting_id(s.page,0)==SETTING_MASTER_PRESET);
+    assert(menu_rows(&s)==11&&menu_setting_id(s.page,0)==SETTING_MASTER_PRESET);
     assert(menu_button(&s,PAD_A,1)==MENU_MASTER_PRESET_CHANGED&&s.layout_style==LAYOUT_ISLAND);
     s.page=PAGE_APPEARANCE;s.selection=1;s.armed=1;
     assert(menu_button(&s,PAD_A,1)==MENU_LAYOUT_STYLE_CHANGED&&s.layout_style==LAYOUT_SIDEBLADE&&s.master_preset==PRESET_CUSTOM);
+    s.page=PAGE_APPEARANCE;s.selection=9;s.armed=1;
+    assert(menu_setting_id(s.page,9)==SETTING_FAVORITES_FIRST);
+    assert(menu_button(&s,PAD_A,1)==MENU_FAVORITES_FIRST_CHANGED&&s.open_favorites_first==1);
+    menu_show(&s);assert(s.page==PAGE_MAIN&&s.topbar_tab==TOPBAR_FAVORITES&&s.selection==0);
+    s.open_favorites_first=0;menu_show(&s);assert(s.topbar_tab==TOPBAR_ACTIONS);
+    s.armed=1;assert(menu_button(&s,PAD_LB,1)==MENU_CHANGED&&s.topbar_tab==TOPBAR_FAVORITES);
+    assert(menu_rows(&s)==1&&menu_button(&s,PAD_A,1)==MENU_CHANGED&&s.page==PAGE_FAVORITE_SEARCH);
+    assert(menu_favorite_search_char(&s,'s')&&menu_favorite_search_char(&s,'t')&&menu_favorite_search_char(&s,'a')&&menu_favorite_search_char(&s,'m'));
+    s.armed=1;s.selection=1;assert(menu_button(&s,PAD_A,1)==MENU_FAVORITES_CHANGED&&s.favorite_count==1&&s.favorites[0]==FAV_STAMINA);
+    {wchar_t buf[64];int parsed[MENU_MAX_FAVORITES]={0},pc=0;fav_serialize(s.favorites,s.favorite_count,buf,64);fav_deserialize(buf,parsed,&pc);assert(pc==1&&parsed[0]==FAV_STAMINA);}
+    s.armed=1;assert(menu_button(&s,PAD_B,1)==MENU_CHANGED&&s.page==PAGE_MAIN&&s.topbar_tab==TOPBAR_FAVORITES&&menu_rows(&s)==2);
+    s.armed=1;s.selection=0;assert(menu_button(&s,PAD_A,1)==MENU_CHEAT_STAMINA);
     s.page=PAGE_MAIN;s.topbar_tab=TOPBAR_ACTIONS;s.selection=3;s.armed=1;
     assert(menu_button(&s,PAD_A,1)==MENU_CHANGED&&s.page==PAGE_QUIT);
     s.page=PAGE_MAIN;s.selection=2;s.armed=1;
