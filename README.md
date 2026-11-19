@@ -18,6 +18,8 @@
 
 ## Quick installation
 
+The [UFC 4 expansion](ufc4/README.md) is a separate local prototype in this repository. The UFC 6 installer below does not install it.
+
 1. [Download the latest installer](https://github.com/thyaguster/ufc6-parsectagon-overlay/releases/latest): **UFC6-Parsectagon-Overlay-Setup-*.exe**.
 2. Close **UFC 6** and **PORTHEON**, run the installer, and select your **`PORTHEON\games\UFC6`** folder (the launcher folder containing `UFC6.exe`, not your extracted game-data folder).
 3. Click **Check folder**, then **Install / Update** once. The installer checks and updates both **Original / Parsec (`bin`)** and **PS5 Pro / DLSS (`novo`)** when present.

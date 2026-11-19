@@ -14,4 +14,6 @@ dist/*.lib
 dist/*.pdb
 dist/*.log
 dist/*.png
+ufc4/dist/
+ufc4/UFC4-NEXT-CHAT.md
 *.pyc
