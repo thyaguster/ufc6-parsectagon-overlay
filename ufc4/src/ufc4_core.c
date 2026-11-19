@@ -8,7 +8,7 @@
 #include <objbase.h>
 #include <Xinput.h>
 #include "screenshot_folder.h"
-#include "ufc4_cheats_config.h"
+#include "ufc4_live_cheats.h"
 #include "audio_session_mute.h"
 
 static volatile LONG open;
@@ -24,14 +24,14 @@ static int button_style;
 static int game_button_style;
 static int icon_choice;
 static int skip_movies;
-static volatile LONG mute_minimized;
+static volatile LONG mute_unfocused;
 static int preferences_loaded;
 static volatile LONG audio_worker_started;
 static unsigned cheats_mask;
 static int cheats_ready;
 enum {PAGE_MAIN,PAGE_SETTINGS,PAGE_ABOUT,PAGE_QUIT,PAGE_RESTART,PAGE_ICON_CONFIRM,PAGE_GAME_ICONS,PAGE_CHEATS};
 static const wchar_t *main_items[]={L"Resume game",L"Take screenshot",L"Open screenshots folder",L"Restart game",L"Settings",L"Cheats",L"Quit game"};
-static const wchar_t *settings_items[]={L"Overlay button icons",L"Game button icons",L"Skip intros",L"Mute when minimized",L"Back"};
+static const wchar_t *settings_items[]={L"Overlay button icons",L"Game button icons",L"Skip intros",L"Mute when unfocused",L"Back"};
 static const wchar_t *game_icon_items[]={L"Xbox",L"PlayStation",L"Keyboard & mouse",L"Back"};
 static const wchar_t *cheat_items[]={L"Infinite stamina: left fighter",L"Infinite stamina: right fighter",L"Back"};
 static const wchar_t *choice_items[]={L"Cancel",L"Confirm"};
@@ -54,7 +54,9 @@ static void load_preferences(void){
         game_button_style=GetPrivateProfileIntW(L"Appearance",L"GameButtonStyle",1,path);
         if(game_button_style<0||game_button_style>2)game_button_style=1;
         skip_movies=GetPrivateProfileIntW(L"Menu",L"SkipStartupSplashes",movie_setting(-1)==1,path)!=0;
-        InterlockedExchange(&mute_minimized,GetPrivateProfileIntW(L"Menu",L"MuteWhenMinimized",0,path)!=0);
+        int mute=GetPrivateProfileIntW(L"Menu",L"MuteWhenUnfocused",-1,path);
+        if(mute<0)mute=GetPrivateProfileIntW(L"Menu",L"MuteWhenMinimized",0,path);
+        InterlockedExchange(&mute_unfocused,mute!=0);
     }
 }
 static void save_preferences(void){
@@ -63,7 +65,7 @@ static void save_preferences(void){
         WritePrivateProfileStringW(L"Appearance",L"ButtonStyle",button_style?L"1":L"0",path);
         WritePrivateProfileStringW(L"Appearance",L"GameButtonStyle",game_button_style==2?L"2":game_button_style?L"1":L"0",path);
         WritePrivateProfileStringW(L"Menu",L"SkipStartupSplashes",skip_movies?L"1":L"0",path);
-        WritePrivateProfileStringW(L"Menu",L"MuteWhenMinimized",InterlockedCompareExchange(&mute_minimized,0,0)?L"1":L"0",path);
+        WritePrivateProfileStringW(L"Menu",L"MuteWhenUnfocused",InterlockedCompareExchange(&mute_unfocused,0,0)?L"1":L"0",path);
     }
 }
 /* sacredfire.ini is a plain key=value file, not a Windows sectioned INI. */
@@ -101,9 +103,6 @@ __declspec(dllexport) int Ufc4TestSaveSkipMovies(int enabled){
     wchar_t path[MAX_PATH];settings_path(path,MAX_PATH);
     return GetPrivateProfileIntW(L"Menu",L"SkipStartupSplashes",-1,path);
 }
-__declspec(dllexport) void Ufc4TestCheatPath(const wchar_t *path){ufc4_cheats_test_path(path);}
-__declspec(dllexport) int Ufc4TestCheatRead(void){unsigned mask=0;return ufc4_cheats_read(&mask)?(int)mask:-1;}
-__declspec(dllexport) int Ufc4TestCheatToggle(int fighter){unsigned mask=0;return ufc4_cheats_toggle(fighter,&mask)?(int)mask:-1;}
 #endif
 static BOOL CALLBACK find_window(HWND window,LPARAM result){
     DWORD pid=0;GetWindowThreadProcessId(window,&pid);
@@ -117,8 +116,10 @@ static DWORD WINAPI audio_worker(void *unused){
     (void)unused;
     for(;;){
         HWND window=game_window();
-        int minimized=window&&IsIconic(window);
-        audio_session_mute_poll(InterlockedCompareExchange(&mute_minimized,0,0),!minimized);
+        HWND foreground=GetForegroundWindow();DWORD foreground_pid=0;
+        if(foreground)GetWindowThreadProcessId(foreground,&foreground_pid);
+        int focused=window&&!IsIconic(window)&&foreground_pid==GetCurrentProcessId();
+        audio_session_mute_poll(InterlockedCompareExchange(&mute_unfocused,0,0),!window||focused);
         Sleep(250);
     }
 }
@@ -287,7 +288,7 @@ static void poll_input(void){
         case 2:open_screenshots();break;
         case 3:page=PAGE_RESTART;selected=0;break;
         case 4:page=PAGE_SETTINGS;selected=0;break;
-        case 5:page=PAGE_CHEATS;selected=0;cheats_ready=ufc4_cheats_read(&cheats_mask);break;
+        case 5:page=PAGE_CHEATS;selected=0;cheats_ready=ufc4_live_stamina_prepare();cheats_mask=ufc4_live_stamina_mask();break;
         case 6:page=PAGE_QUIT;selected=0;break;
         }
     }else if(page==PAGE_SETTINGS){
@@ -300,15 +301,15 @@ static void poll_input(void){
             save_preferences();
         }
         else if(selected==3){
-            InterlockedExchange(&mute_minimized,!InterlockedCompareExchange(&mute_minimized,0,0));
+            InterlockedExchange(&mute_unfocused,!InterlockedCompareExchange(&mute_unfocused,0,0));
             save_preferences();
         }
         else{page=PAGE_MAIN;selected=0;}
     }else if(page==PAGE_CHEATS){
         if(selected==2){page=PAGE_MAIN;selected=5;}
-        else if(!cheats_ready)message(L"PORTHEON stamina cheats or settings are unavailable.");
-        else if(ufc4_cheats_toggle(selected,&cheats_mask))message(L"Stamina choice saved for the next launch.");
-        else message(L"Could not save the stamina cheat choice.");
+        else if(!cheats_ready)message(L"Live stamina hook is unavailable in this game build.");
+        else if(ufc4_live_stamina_toggle(selected,&cheats_mask))message(L"Stamina cheat changed for this session.");
+        else message(L"Could not change the live stamina cheat.");
     }else if(page==PAGE_GAME_ICONS){
         if(selected==3){page=PAGE_SETTINGS;selected=1;}
         else if(selected!=game_button_style){icon_choice=selected;page=PAGE_ICON_CONFIRM;selected=0;}
@@ -351,7 +352,7 @@ __declspec(dllexport) BOOL Ufc4RenderMenu(void *destination,uint32_t bytes){
     SetBkMode(dc,TRANSPARENT);SetTextColor(dc,RGB(242,245,248));SelectObject(dc,title);
     const wchar_t *heading=page==PAGE_MAIN?L"UFC 4 Actions Overlay":page==PAGE_SETTINGS?L"Settings":page==PAGE_CHEATS?L"Cheats":page==PAGE_GAME_ICONS?L"Game button icons":page==PAGE_QUIT?L"Quit UFC 4?":page==PAGE_RESTART?L"Restart UFC 4?":page==PAGE_ICON_CONFIRM?L"Change game button icons?":L"About";
     TextOutW(dc,34,24,heading,(int)wcslen(heading));SelectObject(dc,body);SetTextColor(dc,RGB(175,190,207));
-    const wchar_t *sub=page==PAGE_MAIN?L"Quick actions while UFC 4 is running":page==PAGE_SETTINGS?L"Prompts, startup videos, and audio":page==PAGE_CHEATS?L"Stamina applies next launch. Other cheats are under investigation.":page==PAGE_GAME_ICONS?L"Choose the prompts shown by UFC 4.":page==PAGE_QUIT?L"Unsaved game progress may be lost.":page==PAGE_RESTART?L"The game will close and relaunch through PORTHEON.":page==PAGE_ICON_CONFIRM?L"The game will close and restart. Save progress first.":L"Native Vulkan prototype for UFC 4";
+    const wchar_t *sub=page==PAGE_MAIN?L"Quick actions while UFC 4 is running":page==PAGE_SETTINGS?L"Prompts, startup videos, and audio":page==PAGE_CHEATS?L"Stamina changes now and resets when UFC 4 exits.":page==PAGE_GAME_ICONS?L"Choose the prompts shown by UFC 4.":page==PAGE_QUIT?L"Unsaved game progress may be lost.":page==PAGE_RESTART?L"The game will close and relaunch through PORTHEON.":page==PAGE_ICON_CONFIRM?L"The game will close and restart. Save progress first.":L"Native Vulkan prototype for UFC 4";
     TextOutW(dc,35,69,sub,(int)wcslen(sub));
     if(page==PAGE_ICON_CONFIRM){
         const wchar_t *target=icon_choice==2?L"New game prompts: Keyboard & mouse":icon_choice?L"New game prompts: PlayStation":L"New game prompts: Xbox";
@@ -366,9 +367,9 @@ __declspec(dllexport) BOOL Ufc4RenderMenu(void *destination,uint32_t bytes){
             if(page==PAGE_SETTINGS&&i==0){const wchar_t *value=button_style?L"PlayStation":L"Xbox";TextOutW(dc,(int)panel_width-190,y+9,value,(int)wcslen(value));}
             if(page==PAGE_SETTINGS&&i==1){const wchar_t *value=game_button_style==2?L"Keyboard & mouse":game_button_style?L"PlayStation":L"Xbox";TextOutW(dc,(int)panel_width-225,y+9,value,(int)wcslen(value));}
             if(page==PAGE_SETTINGS&&i==2){const wchar_t *value=skip_movies?L"On":L"Off";TextOutW(dc,(int)panel_width-145,y+9,value,(int)wcslen(value));}
-            if(page==PAGE_SETTINGS&&i==3){const wchar_t *value=InterlockedCompareExchange(&mute_minimized,0,0)?L"On":L"Off";TextOutW(dc,(int)panel_width-145,y+9,value,(int)wcslen(value));}
+            if(page==PAGE_SETTINGS&&i==3){const wchar_t *value=InterlockedCompareExchange(&mute_unfocused,0,0)?L"On":L"Off";TextOutW(dc,(int)panel_width-145,y+9,value,(int)wcslen(value));}
             if(page==PAGE_GAME_ICONS&&i==game_button_style){const wchar_t *value=L"Current";TextOutW(dc,(int)panel_width-150,y+9,value,(int)wcslen(value));}
-            if(page==PAGE_CHEATS&&i<2){const wchar_t *value=!cheats_ready?L"Unavailable":(cheats_mask&(1u<<i))?L"Next launch: On":L"Next launch: Off";TextOutW(dc,(int)panel_width-195,y+9,value,(int)wcslen(value));}
+            if(page==PAGE_CHEATS&&i<2){const wchar_t *value=!cheats_ready?L"Unavailable":(cheats_mask&(1u<<i))?L"On":L"Off";TextOutW(dc,(int)panel_width-145,y+9,value,(int)wcslen(value));}
         }
     }else{SetTextColor(dc,RGB(235,241,247));
         const wchar_t *first=L"Screenshots, restart, quit and input are now ported.";

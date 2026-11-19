@@ -40,4 +40,4 @@
 - **Dual-engine installer (`installer/Setup.cs`):** Combined Install / Update / Repair / Remove checks both `bin` (`Original / Parsec`) and `novo` (`PS5 Pro / DLSS`) before modifying either.
 - **Foreign-mod safety (`installer/SelfTests.cs`):** `Manager.Apply(folder, false)` without `repair: true` must continue to reject unrecognized files (`Conflicts.Count != 0`).
 - **Output folders:** Support reports, save backups, and fight reports use `Documents\UFC 6 Parsectagon Overlay` (with fallback reads for older fight reports). The update cache uses `%LOCALAPPDATA%\UFC 6 Parsectagon Overlay\Updates`.
-- **UFC 4 cheats:** the current page writes only PORTHEON's saved left/right stamina IDs. They take effect when PORTHEON links the next game launch. Do not present them as live fight toggles or enable the experimental damage pack without an in-game test.
+- **UFC 4 cheats:** the current page uses a guarded, session-only stamina hook. Do not write PORTHEON's startup cheat config from this menu. The live hook and experimental damage pack still need in-game validation before broader cheat controls are added.
