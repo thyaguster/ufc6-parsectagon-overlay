@@ -23,6 +23,9 @@ enum {
     FAV_GAME_SETTINGS,
     FAV_PERFORMANCE,
     FAV_TOOLS,
+    FAV_PARSECTAGON_WEB,
+    FAV_DISCORD,
+    FAV_GITHUB,
     FAV_CATALOG_COUNT
 };
 enum {
@@ -65,7 +68,10 @@ static inline const FavoriteCatalogItem *fav_catalog_item(int id) {
         { FAV_CONTROLS,        FAV_CAT_SETTINGS, "controls",     L"Controls & keybinds...",        L"Settings" },
         { FAV_GAME_SETTINGS,   FAV_CAT_SETTINGS, "game",         L"Game & launcher settings...",   L"Settings" },
         { FAV_PERFORMANCE,     FAV_CAT_SETTINGS, "performance",  L"Performance & graphics...",     L"Settings" },
-        { FAV_TOOLS,           FAV_CAT_SETTINGS, "tools",        L"Tools & diagnostics...",        L"Settings" }
+        { FAV_TOOLS,           FAV_CAT_SETTINGS, "tools",        L"Tools & diagnostics...",        L"Settings" },
+        { FAV_PARSECTAGON_WEB, FAV_CAT_SETTINGS, "parsectagon",  L"Parsectagon website...",        L"Settings" },
+        { FAV_DISCORD,         FAV_CAT_SETTINGS, "discord",      L"Discord community...",          L"Settings" },
+        { FAV_GITHUB,          FAV_CAT_SETTINGS, "github",       L"GitHub repository...",          L"Settings" }
     };
     return (id >= 0 && id < FAV_CATALOG_COUNT) ? &items[id] : NULL;
 }

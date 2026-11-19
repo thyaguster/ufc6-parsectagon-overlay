@@ -9,6 +9,8 @@
 
 <p align="center">
   <a href="https://github.com/thyaguster/ufc6-parsectagon-overlay/releases/latest"><strong>Download the latest release</strong></a>
+  · <a href="https://parsectagon.cc"><strong>Parsectagon</strong></a>
+  · <a href="https://discord.gg/a84pBw2Ff"><strong>Discord</strong></a>
   · <a href="#quick-installation">Quick installation</a>
   · <a href="#ui-types--presets">UI Types &amp; Presets</a>
   · <a href="#overlay-pages">Overlay Pages</a>

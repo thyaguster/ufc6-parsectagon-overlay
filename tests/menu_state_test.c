@@ -427,6 +427,10 @@ int main(void) {
     assert(menu_button(&s,PAD_A,1)==MENU_CHANGED&&s.page==PAGE_CONTROLS);
     s.page=PAGE_MAIN;s.layout_style=LAYOUT_TOPBAR;s.topbar_tab=TOPBAR_ACTIONS;s.armed=1;
     assert(menu_button(&s,PAD_Y,1)==MENU_CHANGED&&s.page==PAGE_FAVORITE_SEARCH&&s.fav_search_mode==1);
+    s.page=PAGE_TOOLS;assert(menu_rows(&s)==9);
+    s.selection=4;s.armed=1;assert(menu_setting_id(s.page,4)==SETTING_LINK_PARSECTAGON&&menu_button(&s,PAD_A,1)==MENU_OPEN_PARSECTAGON);
+    s.selection=5;s.armed=1;assert(menu_setting_id(s.page,5)==SETTING_LINK_DISCORD&&menu_button(&s,PAD_A,1)==MENU_OPEN_DISCORD);
+    s.selection=6;s.armed=1;assert(menu_setting_id(s.page,6)==SETTING_LINK_GITHUB&&menu_button(&s,PAD_A,1)==MENU_OPEN_GITHUB);
     s.page=PAGE_MAIN;s.topbar_tab=TOPBAR_ACTIONS;s.selection=3;s.armed=1;
     assert(menu_button(&s,PAD_A,1)==MENU_CHANGED&&s.page==PAGE_QUIT);
     s.page=PAGE_MAIN;s.selection=2;s.armed=1;

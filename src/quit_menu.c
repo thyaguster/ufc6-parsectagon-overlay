@@ -2172,7 +2172,7 @@ static void draw_menu(HDC dc, RECT r) {
     const wchar_t *avatar_always_labels[]={L"Cancel",state.avatar_mode==2?L"Turn Off and restart":L"Turn On and restart"};
     const wchar_t *lobby_account_labels[]={L"Link or change account",L"Unlink this PC",L"Back"};
     const wchar_t *main_labels[]={L"Resume",L"Take screenshot",L"Restart game",L"Cheats",L"Photo Mode",L"Parsectagon",L"Settings",L"Quit game",L"Restart PC",L"Shut down PC"};
-    const wchar_t *setting_labels[]={L"Overlay button icons",L"Opening shortcut",L"UI scale",L"Launch UFC 6 after PC restart",L"Xbox / Guide button",L"Windows Game Bar shortcut",L"Launcher setup...",L"Controller access",L"Screenshots folder",L"Reset overlay settings...",L"Patch in-game controller icons...",L"Check for updates...",L"Export support report...",L"Keybinds...",L"Theme...",L"Back",L"Font size",L"Box style",L"Window size",L"Visual auto-confirm fallback",L"Skip intros",L"Suppress online notices",L"Include overlay in screenshots",L"Skip title & network warnings...",L"Mute when unfocused",L"Replay after decisions",L"Experimental...",L"Instant Replay in fights",L"Fix career avatar...",L"Image readback always on",L"Master preset",L"Menu layout",L"Backdrop style",L"Replace Online tab with Parsectagon",L"Open Favorites tab first"};
+    const wchar_t *setting_labels[]={L"Overlay button icons",L"Opening shortcut",L"UI scale",L"Launch UFC 6 after PC restart",L"Xbox / Guide button",L"Windows Game Bar shortcut",L"Launcher setup...",L"Controller access",L"Screenshots folder",L"Reset overlay settings...",L"Patch in-game controller icons...",L"Check for updates...",L"Export support report...",L"Keybinds...",L"Theme...",L"Back",L"Font size",L"Box style",L"Window size",L"Visual auto-confirm fallback",L"Skip intros",L"Suppress online notices",L"Include overlay in screenshots",L"Skip title & network warnings...",L"Mute when unfocused",L"Replay after decisions",L"Experimental...",L"Instant Replay in fights",L"Fix career avatar...",L"Image readback always on",L"Master preset",L"Menu layout",L"Backdrop style",L"Replace Online tab with Parsectagon",L"Open Favorites tab first",L"Parsectagon website...",L"Discord community...",L"GitHub repository..."};
     const wchar_t *photo_labels[]={state.photo_active?L"Continue camera":L"Enter Photo Mode",L"Freeze action",L"Hide HUD",L"Keep cage visible",L"Show controls panel",L"Reset camera",L"Take screenshot",L"Exit Photo Mode",L"Controls...",L"Filters & effects...",L"Watermark...",L"Back"};
     const wchar_t *effect_labels[]={L"Filter",L"Filter strength",L"Exposure",L"Contrast",L"Saturation",L"Warmth",L"Vignette",L"Film grain",L"Cinematic bars",L"Reset effects",L"Back"};
     const wchar_t *mark_labels[]={L"Show watermark",L"Player name",L"Corner",L"Opacity",L"Size",L"Style",L"Font",L"Text color",L"Back"};
@@ -2297,6 +2297,9 @@ static void draw_menu(HDC dc, RECT r) {
                 case SETTING_DECISION_REPLAY:toggle=state.decision_replays;break;
                 case SETTING_REPLACE_ONLINE:toggle=state.replace_online_tab;break;
                 case SETTING_FAVORITES_FIRST:toggle=state.open_favorites_first;break;
+                case SETTING_LINK_PARSECTAGON:value=L"parsectagon.cc";break;
+                case SETTING_LINK_DISCORD:value=L"discord.gg";break;
+                case SETTING_LINK_GITHUB:value=L"GitHub";break;
                 case SETTING_INSTANT_REPLAY:toggle=state.instant_replay;break;
                 case SETTING_AVATAR_ALWAYS:toggle=state.avatar_mode==2;break;
                 case SETTING_MASTER_PRESET:value=master_preset_names[state.master_preset];arrows=1;break;
@@ -3732,6 +3735,11 @@ static DWORD WINAPI worker(void *unused) {
             else if(msg.wParam==MENU_REPLACE_ONLINE_CHANGED){save_settings();status(menu.replace_online_tab?L"Parsectagon opens on the Online tab.":L"UFC 6 Online tab restored. F10 > Parsectagon remains available.");}
             else if(msg.wParam==MENU_FAVORITES_CHANGED){save_settings();status(L"Favorites updated.");}
             else if(msg.wParam==MENU_FAVORITES_FIRST_CHANGED){save_settings();status(menu.open_favorites_first?L"Overlay will open on Favorites first.":L"Overlay will open on Actions first.");}
+            else if(msg.wParam==MENU_OPEN_PARSECTAGON||msg.wParam==MENU_OPEN_DISCORD||msg.wParam==MENU_OPEN_GITHUB){
+                const wchar_t *url=msg.wParam==MENU_OPEN_PARSECTAGON?L"https://parsectagon.cc":msg.wParam==MENU_OPEN_DISCORD?L"https://discord.gg/a84pBw2Ff":L"https://github.com/thyaguster/ufc6-parsectagon-overlay";
+                ShellExecuteW(NULL,L"open",url,NULL,NULL,SW_SHOWNORMAL);
+                status(msg.wParam==MENU_OPEN_PARSECTAGON?L"Opened parsectagon.cc in browser.":msg.wParam==MENU_OPEN_DISCORD?L"Opened Discord invite in browser.":L"Opened GitHub repository in browser.");
+            }
             else if(msg.wParam==MENU_AVATAR_REPAIR_START)avatar_change_mode(AVATAR_READBACK_REPAIR);
             else if(msg.wParam==MENU_AVATAR_REPAIR_FINISH)avatar_change_mode(AVATAR_READBACK_OFF);
             else if(msg.wParam==MENU_AVATAR_ALWAYS_CHANGED){
