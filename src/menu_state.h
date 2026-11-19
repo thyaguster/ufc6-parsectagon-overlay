@@ -505,6 +505,9 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
         s->page=PAGE_LOBBY;s->selection=6+s->lobby_room_count;return MENU_CHANGED;
     }
     if(s->page==PAGE_MAIN&&s->layout_style!=LAYOUT_CLASSIC){
+        if(button==PAD_Y){
+            s->page=PAGE_FAVORITE_SEARCH;s->selection=0;s->fav_search_mode=1;s->fav_search_category=FAV_CAT_ALL;s->fav_search_query[0]=0;s->armed=0;return MENU_CHANGED;
+        }
         if(button==PAD_LB){
             s->topbar_tab=topbar_next_tab(s->topbar_tab,-1);s->selection=0;return MENU_CHANGED;
         }

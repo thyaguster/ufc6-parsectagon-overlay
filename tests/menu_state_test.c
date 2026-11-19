@@ -425,6 +425,8 @@ int main(void) {
     s.selection=2;s.armed=1;assert(menu_button(&s,PAD_A,1)==MENU_CHANGED&&s.page==PAGE_QUIT);
     s.page=PAGE_KEYBINDS;assert(menu_rows(&s)==BIND_COUNT+1);s.selection=BIND_COUNT;s.armed=1;
     assert(menu_button(&s,PAD_A,1)==MENU_CHANGED&&s.page==PAGE_CONTROLS);
+    s.page=PAGE_MAIN;s.layout_style=LAYOUT_TOPBAR;s.topbar_tab=TOPBAR_ACTIONS;s.armed=1;
+    assert(menu_button(&s,PAD_Y,1)==MENU_CHANGED&&s.page==PAGE_FAVORITE_SEARCH&&s.fav_search_mode==1);
     s.page=PAGE_MAIN;s.topbar_tab=TOPBAR_ACTIONS;s.selection=3;s.armed=1;
     assert(menu_button(&s,PAD_A,1)==MENU_CHANGED&&s.page==PAGE_QUIT);
     s.page=PAGE_MAIN;s.selection=2;s.armed=1;

@@ -1630,10 +1630,10 @@ static void draw_modern_footer(HDC dc, RECT footer, const MenuState *state, cons
     int x = footer.left + 12;
     if (state->page == PAGE_FAVORITE_SEARCH) {
         const struct { uint32_t bit; const wchar_t *label; int w; } tips[] = {
-            { PAD_A, state->fav_search_mode ? L"Enter/Open" : L"Enter/Pin", 96 },
-            { PAD_X, L"Del", 52 },
+            { PAD_A, L"Enter", 70 },
+            { PAD_X, L"Del", 54 },
             { PAD_Y, L"Space", 68 },
-            { PAD_LB, L"Clear", 80 },
+            { PAD_LB, L"Clear", 86 },
             { PAD_B, L"Back", 58 }
         };
         for (int ti = 0; ti < 5 && x + tips[ti].w < footer.right - 8; ++ti) {
@@ -1641,9 +1641,9 @@ static void draw_modern_footer(HDC dc, RECT footer, const MenuState *state, cons
                 int by = footer.top + (footer.bottom - footer.top - 16) / 2;
                 controller_artwork_draw(dc, x, by, 20, 16, PAD_LB, ps);
                 controller_artwork_draw(dc, x + 22, by, 20, 16, PAD_RB, ps);
-                RECT lr = { x + 46, footer.top, x + tips[ti].w + 18, footer.bottom };
+                RECT lr = { x + 46, footer.top, x + tips[ti].w, footer.bottom };
                 text(dc, font_small, tips[ti].label, lr, theme->muted, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-                x += tips[ti].w + 20;
+                x += tips[ti].w + 4;
             } else {
                 controller_artwork_draw(dc, x, icon_y, icon_sz, icon_sz, tips[ti].bit, ps);
                 RECT lr = { x + 24, footer.top, x + tips[ti].w, footer.bottom };
@@ -1676,6 +1676,12 @@ static void draw_modern_footer(HDC dc, RECT footer, const MenuState *state, cons
         RECT tab_r = { x + 50, footer.top, x + 92, footer.bottom };
         text(dc, font_small, L"Tabs", tab_r, theme->muted, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
         x += 92;
+    }
+    if (state->page == PAGE_MAIN && state->layout_style != LAYOUT_CLASSIC && footer.right - x > 140) {
+        controller_artwork_draw(dc, x, icon_y, icon_sz, icon_sz, PAD_Y, ps);
+        RECT sr = { x + 24, footer.top, x + 80, footer.bottom };
+        text(dc, font_small, L"Search", sr, theme->muted, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        x += 82;
     }
     if (footer.right - x > 90) {
         RECT hint = { x + 6, footer.top, footer.right - 12, footer.bottom };
