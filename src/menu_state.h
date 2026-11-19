@@ -745,24 +745,6 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
         }
         s->page=PAGE_MAIN;s->selection=MAIN_SETTINGS;s->armed=0;return MENU_CHANGED;
     }
-    if(button!=PAD_A)return MENU_NONE;
-    if(s->page==PAGE_SCREENSHOT){
-        if(s->selection==0){s->armed=0;return MENU_OPEN_SCREENSHOTS;}
-        s->page=PAGE_MAIN;s->selection=MAIN_SCREENSHOT;s->armed=0;return MENU_CHANGED;
-    }
-    if(s->page==PAGE_RESET){
-        s->armed=0;
-        if(s->selection==1)return MENU_RESET_SETTINGS;
-        menu_return_setting(s,SETTING_RESET);return MENU_CHANGED;
-    }
-    if(menu_power_page(s)) {
-        if(s->shutdown_countdown||s->selection==0){menu_cancel_shutdown(s);s->selection=menu_power_selection(s);s->page=PAGE_MAIN;s->armed=0;return MENU_CHANGED;}
-        s->shutdown_holding=1;s->shutdown_hold_since=0;s->shutdown_progress=0;return MENU_CHANGED;
-    }
-    if(s->page==PAGE_RESTART) {
-        if(s->selection==1)return menu_close(s,MENU_RESTART);
-        s->page=PAGE_MAIN;s->selection=MAIN_RESTART;s->armed=0;return MENU_CHANGED;
-    }
     if(s->page==PAGE_FAVORITE_SEARCH){
         int ids[FAV_CATALOG_COUNT];
         int count=fav_filter_items(s->fav_search_category,s->fav_search_query,ids,FAV_CATALOG_COUNT);
@@ -794,6 +776,24 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
             return MENU_FAVORITES_CHANGED;
         }
         return MENU_NONE;
+    }
+    if(button!=PAD_A)return MENU_NONE;
+    if(s->page==PAGE_SCREENSHOT){
+        if(s->selection==0){s->armed=0;return MENU_OPEN_SCREENSHOTS;}
+        s->page=PAGE_MAIN;s->selection=MAIN_SCREENSHOT;s->armed=0;return MENU_CHANGED;
+    }
+    if(s->page==PAGE_RESET){
+        s->armed=0;
+        if(s->selection==1)return MENU_RESET_SETTINGS;
+        menu_return_setting(s,SETTING_RESET);return MENU_CHANGED;
+    }
+    if(menu_power_page(s)) {
+        if(s->shutdown_countdown||s->selection==0){menu_cancel_shutdown(s);s->selection=menu_power_selection(s);s->page=PAGE_MAIN;s->armed=0;return MENU_CHANGED;}
+        s->shutdown_holding=1;s->shutdown_hold_since=0;s->shutdown_progress=0;return MENU_CHANGED;
+    }
+    if(s->page==PAGE_RESTART) {
+        if(s->selection==1)return menu_close(s,MENU_RESTART);
+        s->page=PAGE_MAIN;s->selection=MAIN_RESTART;s->armed=0;return MENU_CHANGED;
     }
     if(s->page==PAGE_FIGHT_REPORT){
         if(s->selection==0)return MENU_FIGHT_REPORT_RETRY;
