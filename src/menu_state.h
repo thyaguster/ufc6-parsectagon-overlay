@@ -54,7 +54,7 @@ typedef struct {
     int first_player_only;
     int career_amount_index[2],career_kind,game_icons_style,game_icons_from_overlay_change,game_icons_return_page,game_icons_return_selection,training_multiplier_index,startup_patch_enable;
     int binding_action,key_capturing,capture_target,theme_selection,font_index,box_style,window_size,settings_legacy,layout_style,backdrop_style,master_preset,topbar_tab;uint32_t assigned_chord;
-    int favorites[MENU_MAX_FAVORITES],favorite_count,open_favorites_first,fav_search_category;
+    int favorites[MENU_MAX_FAVORITES],favorite_count,open_favorites_first,fav_search_category,fav_search_mode;
     char fav_search_query[32];
 } MenuState;
 
@@ -201,7 +201,7 @@ static int menu_scroll_page(int page){return page==PAGE_LOBBY||page==PAGE_STARTU
 static int menu_rows(const MenuState *s) {
     if(s->page==PAGE_MAIN&&s->layout_style!=LAYOUT_CLASSIC)return topbar_tab_rows_for(s);
     if(s->page==PAGE_FAVORITE_SEARCH){int ids[FAV_CATALOG_COUNT];return 2+fav_filter_items(s->fav_search_category,s->fav_search_query,ids,FAV_CATALOG_COUNT);}
-    return s->page==PAGE_FIGHT_REPORT?4:s->page==PAGE_LOBBY_HOME?8:s->page==PAGE_STREAM_PRESETS?5:s->page==PAGE_HOST_FIGHT?7:s->page==PAGE_LOBBY?8+s->lobby_room_count:s->page==PAGE_LOBBY_ACCOUNT?3:s->page==PAGE_WELCOME?1:s->page==PAGE_STARTUP?3:s->page==PAGE_STARTUP_CONFIRM||s->page==PAGE_AVATAR_REPAIR||s->page==PAGE_AVATAR_ALWAYS?2:s->page==PAGE_PERFORMANCE?PERF_ROWS:s->page==PAGE_PERFORMANCE_RESTART||s->page==PAGE_PERFORMANCE_DISCARD?2:s->page==PAGE_PHOTO_EFFECTS?FX_ROWS:s->page==PAGE_PHOTO_WATERMARK?MARK_ROWS:s->page==PAGE_PHOTO?12:s->page==PAGE_PHOTO_CONTROLS?12:s->page==PAGE_SETTINGS_HOME?7:s->page==PAGE_APPEARANCE?11:s->page==PAGE_CONTROLS?5:s->page==PAGE_GAME_SETTINGS?11:s->page==PAGE_TOOLS?6:s->page==PAGE_EXPERIMENTAL?5:s->page==PAGE_KEYBINDS?11:s->page==PAGE_BINDING?5:s->page==PAGE_THEME?7:s->page==PAGE_MAIN?MAIN_COUNT:s->page==PAGE_SETTINGS?SETTING_COUNT:s->page==PAGE_CHEATS?12:s->page==PAGE_BACKUPS?3:s->page==PAGE_GAME_ICONS?5:s->shutdown_countdown?1:2;
+    return s->page==PAGE_FIGHT_REPORT?4:s->page==PAGE_LOBBY_HOME?8:s->page==PAGE_STREAM_PRESETS?5:s->page==PAGE_HOST_FIGHT?7:s->page==PAGE_LOBBY?8+s->lobby_room_count:s->page==PAGE_LOBBY_ACCOUNT?3:s->page==PAGE_WELCOME?1:s->page==PAGE_STARTUP?3:s->page==PAGE_STARTUP_CONFIRM||s->page==PAGE_AVATAR_REPAIR||s->page==PAGE_AVATAR_ALWAYS?2:s->page==PAGE_PERFORMANCE?PERF_ROWS:s->page==PAGE_PERFORMANCE_RESTART||s->page==PAGE_PERFORMANCE_DISCARD?2:s->page==PAGE_PHOTO_EFFECTS?FX_ROWS:s->page==PAGE_PHOTO_WATERMARK?MARK_ROWS:s->page==PAGE_PHOTO?12:s->page==PAGE_PHOTO_CONTROLS?12:s->page==PAGE_SETTINGS_HOME?7:s->page==PAGE_APPEARANCE?11:s->page==PAGE_CONTROLS?5:s->page==PAGE_GAME_SETTINGS?11:s->page==PAGE_TOOLS?6:s->page==PAGE_EXPERIMENTAL?5:s->page==PAGE_KEYBINDS?(BIND_COUNT+1):s->page==PAGE_BINDING?5:s->page==PAGE_THEME?7:s->page==PAGE_MAIN?MAIN_COUNT:s->page==PAGE_SETTINGS?SETTING_COUNT:s->page==PAGE_CHEATS?12:s->page==PAGE_BACKUPS?3:s->page==PAGE_GAME_ICONS?5:s->shutdown_countdown?1:2;
 }
 static int lobby_grid_columns(const MenuState *s){return s->online_takeover&&s->lobby_columns>=3?s->lobby_columns:2;}
 static int lobby_columns_for_viewport(uint32_t width){return width>=2200?4:width>=1700?3:2;}
@@ -327,6 +327,30 @@ static int menu_tick(MenuState *s,uint32_t buttons,uint64_t now,int foreground) 
     if(s->visible&&!buttons)s->armed=1;
     if(s->draining&&!buttons)s->draining=0;
     return MENU_NONE;
+}
+static int menu_execute_favorite_item(MenuState *s,int id){
+    s->armed=0;
+    switch(id){
+        case FAV_SCREENSHOT: return MENU_SCREENSHOT;
+        case FAV_FIGHT_REPORT: s->page=PAGE_FIGHT_REPORT;s->selection=0;return MENU_FIGHT_REPORT_OPEN;
+        case FAV_RESTART: s->page=PAGE_RESTART;s->selection=0;return MENU_CHANGED;
+        case FAV_QUIT: s->page=PAGE_QUIT;s->selection=0;return MENU_CHANGED;
+        case FAV_STAMINA: return MENU_CHEAT_STAMINA;
+        case FAV_NO_DAMAGE: return MENU_CHEAT_HEALTH;
+        case FAV_NEXT_HIT_KO: return MENU_NEXT_HIT_KO;
+        case FAV_CAREER_CHEATS: s->page=PAGE_CHEATS;s->selection=0;return MENU_CHANGED;
+        case FAV_SAVE_BACKUPS: s->page=PAGE_BACKUPS;s->selection=0;return MENU_BACKUP_OPEN;
+        case FAV_PHOTO_ENTER: s->page=PAGE_PHOTO;s->selection=0;return MENU_CHANGED;
+        case FAV_PHOTO_FREEZE: return MENU_PHOTO_FREEZE;
+        case FAV_PHOTO_FX: s->page=PAGE_PHOTO_EFFECTS;s->selection=0;return MENU_CHANGED;
+        case FAV_PHOTO_WATERMARK: s->page=PAGE_PHOTO_WATERMARK;s->selection=0;return MENU_CHANGED;
+        case FAV_APPEARANCE: s->page=PAGE_APPEARANCE;s->selection=0;return MENU_CHANGED;
+        case FAV_CONTROLS: s->page=PAGE_CONTROLS;s->selection=0;return MENU_CHANGED;
+        case FAV_GAME_SETTINGS: s->page=PAGE_GAME_SETTINGS;s->selection=0;return MENU_CHANGED;
+        case FAV_PERFORMANCE: s->page=PAGE_PERFORMANCE;s->selection=0;return MENU_PERFORMANCE_OPEN;
+        case FAV_TOOLS: s->page=PAGE_TOOLS;s->selection=0;return MENU_CHANGED;
+        default: return MENU_NONE;
+    }
 }
 static int menu_button(MenuState *s,uint32_t button,int down) {
     if(!s->visible||!s->armed||!down||s->capturing)return MENU_NONE;
@@ -556,7 +580,7 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
         if(s->page==PAGE_SETTINGS){s->page=page;s->selection=row;}return result;
     }
     if(s->page==PAGE_KEYBINDS&&button==PAD_A){
-        if(s->selection==10){menu_return_setting(s,SETTING_KEYBINDS);}
+        if(s->selection==BIND_COUNT){menu_return_setting(s,SETTING_KEYBINDS);}
         else{s->binding_action=s->selection;s->page=PAGE_BINDING;s->selection=0;}
         s->armed=0;return MENU_CHANGED;
     }
@@ -757,7 +781,9 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
             return MENU_CHANGED;
         }
         if(s->selection>=1&&s->selection<=count){
-            fav_toggle_pin(s->favorites,&s->favorite_count,ids[s->selection-1]);
+            int id=ids[s->selection-1];
+            if(s->fav_search_mode)return menu_execute_favorite_item(s,id);
+            fav_toggle_pin(s->favorites,&s->favorite_count,id);
             return MENU_FAVORITES_CHANGED;
         }
         return MENU_NONE;
@@ -772,31 +798,9 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
         switch(s->topbar_tab){
             case TOPBAR_FAVORITES:
                 if(s->selection==s->favorite_count){
-                    s->page=PAGE_FAVORITE_SEARCH;s->selection=0;s->fav_search_category=FAV_CAT_ALL;s->fav_search_query[0]=0;s->armed=0;return MENU_CHANGED;
+                    s->page=PAGE_FAVORITE_SEARCH;s->selection=0;s->fav_search_mode=0;s->fav_search_category=FAV_CAT_ALL;s->fav_search_query[0]=0;s->armed=0;return MENU_CHANGED;
                 }
-                if(s->selection>=0&&s->selection<s->favorite_count){
-                    int id=s->favorites[s->selection];s->armed=0;
-                    switch(id){
-                        case FAV_SCREENSHOT: return MENU_SCREENSHOT;
-                        case FAV_FIGHT_REPORT: s->page=PAGE_FIGHT_REPORT;s->selection=0;return MENU_FIGHT_REPORT_OPEN;
-                        case FAV_RESTART: s->page=PAGE_RESTART;s->selection=0;return MENU_CHANGED;
-                        case FAV_QUIT: s->page=PAGE_QUIT;s->selection=0;return MENU_CHANGED;
-                        case FAV_STAMINA: return MENU_CHEAT_STAMINA;
-                        case FAV_NO_DAMAGE: return MENU_CHEAT_HEALTH;
-                        case FAV_NEXT_HIT_KO: return MENU_NEXT_HIT_KO;
-                        case FAV_CAREER_CHEATS: s->page=PAGE_CHEATS;s->selection=0;return MENU_CHANGED;
-                        case FAV_SAVE_BACKUPS: s->page=PAGE_BACKUPS;s->selection=0;return MENU_BACKUP_OPEN;
-                        case FAV_PHOTO_ENTER: s->page=PAGE_PHOTO;s->selection=0;return MENU_CHANGED;
-                        case FAV_PHOTO_FREEZE: return MENU_PHOTO_FREEZE;
-                        case FAV_PHOTO_FX: s->page=PAGE_PHOTO_EFFECTS;s->selection=0;return MENU_CHANGED;
-                        case FAV_PHOTO_WATERMARK: s->page=PAGE_PHOTO_WATERMARK;s->selection=0;return MENU_CHANGED;
-                        case FAV_APPEARANCE: s->page=PAGE_APPEARANCE;s->selection=0;return MENU_CHANGED;
-                        case FAV_CONTROLS: s->page=PAGE_CONTROLS;s->selection=0;return MENU_CHANGED;
-                        case FAV_GAME_SETTINGS: s->page=PAGE_GAME_SETTINGS;s->selection=0;return MENU_CHANGED;
-                        case FAV_PERFORMANCE: s->page=PAGE_PERFORMANCE;s->selection=0;return MENU_PERFORMANCE_OPEN;
-                        case FAV_TOOLS: s->page=PAGE_TOOLS;s->selection=0;return MENU_CHANGED;
-                    }
-                }
+                if(s->selection>=0&&s->selection<s->favorite_count)return menu_execute_favorite_item(s,s->favorites[s->selection]);
                 break;
             case TOPBAR_ACTIONS:
                 if(s->selection==0)return menu_close(s,MENU_RESUME);

@@ -3,8 +3,8 @@
 #include <wchar.h>
 #include <stdio.h>
 #include <string.h>
-const wchar_t *binding_names[BIND_COUNT]={L"Open overlay",L"Take screenshot",L"Cheats",L"Settings",L"Savegame backup",L"Restart game",L"Quit game",L"Restart PC",L"Shut down PC",L"Photo Mode"};
-static const wchar_t *binding_ids[BIND_COUNT]={L"Open",L"Screenshot",L"Cheats",L"Settings",L"Backup",L"RestartGame",L"QuitGame",L"RestartPC",L"ShutdownPC",L"PhotoMode"};
+const wchar_t *binding_names[BIND_COUNT]={L"Open overlay",L"Take screenshot",L"Cheats",L"Settings",L"Savegame backup",L"Restart game",L"Quit game",L"Restart PC",L"Shut down PC",L"Photo Mode",L"Search features"};
+static const wchar_t *binding_ids[BIND_COUNT]={L"Open",L"Screenshot",L"Cheats",L"Settings",L"Backup",L"RestartGame",L"QuitGame",L"RestartPC",L"ShutdownPC",L"PhotoMode",L"Search"};
 const wchar_t *theme_choices[8]={L"From config",L"Green",L"Blue",L"Red",L"Purple",L"Amber",L"Parsectagon",L"Back"};
 const wchar_t *master_preset_names[PRESET_COUNT]={L"Custom",L"★ Parsectagon Apex",L"Octagon Pill",L"Championship Solid",L"Stealth Island",L"Classic Box",L"Side Blade",L"Bottom Dock",L"Bento Deck",L"Broadcast Card",L"Octagon Hub"};
 const wchar_t *layout_style_names[LAYOUT_COUNT]={L"Classic Box",L"Top Bar",L"Floating Island",L"Side Blade",L"Bottom Dock",L"Bento Deck",L"Broadcast Card",L"Octagon Hub"};
@@ -68,7 +68,7 @@ void preferences_load(OverlayPreferences *p,const wchar_t *ini,uint32_t open_pad
     p->backdrop_style=(int)GetPrivateProfileIntW(L"Menu",L"BackdropStyle",BACKDROP_GLASS,ini);if(p->backdrop_style<0||p->backdrop_style>=BACKDROP_COUNT)p->backdrop_style=BACKDROP_GLASS;
     p->master_preset=(int)GetPrivateProfileIntW(L"Menu",L"MasterPreset",PRESET_APEX,ini);if(p->master_preset<0||p->master_preset>=PRESET_COUNT)p->master_preset=PRESET_APEX;
     for(int i=0;i<BIND_COUNT;++i){wchar_t name[64],value[64],*end;
-        swprintf(name,64,L"%lsKey",binding_ids[i]);GetPrivateProfileStringW(L"Keybinds",name,i==BIND_PHOTO?L"0x78":L"0",value,64,ini);unsigned long v=wcstoul(value,&end,0);if(!*end)binding_set(p,i,1,(uint32_t)v);
+        swprintf(name,64,L"%lsKey",binding_ids[i]);GetPrivateProfileStringW(L"Keybinds",name,i==BIND_PHOTO?L"0x78":i==BIND_SEARCH?L"0x0146":L"0",value,64,ini);unsigned long v=wcstoul(value,&end,0);if(!*end)binding_set(p,i,1,(uint32_t)v);
         if(!i)continue;swprintf(name,64,L"%lsPad",binding_ids[i]);GetPrivateProfileStringW(L"Keybinds",name,L"0",value,64,ini);v=wcstoul(value,&end,0);if(!*end)binding_set(p,i,0,(uint32_t)v);
     }
 }

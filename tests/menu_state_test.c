@@ -415,6 +415,11 @@ int main(void) {
     {wchar_t buf[64];int parsed[MENU_MAX_FAVORITES]={0},pc=0;fav_serialize(s.favorites,s.favorite_count,buf,64);fav_deserialize(buf,parsed,&pc);assert(pc==1&&parsed[0]==FAV_STAMINA);}
     s.armed=1;assert(menu_button(&s,PAD_B,1)==MENU_CHANGED&&s.page==PAGE_MAIN&&s.topbar_tab==TOPBAR_FAVORITES&&menu_rows(&s)==2);
     s.armed=1;s.selection=0;assert(menu_button(&s,PAD_A,1)==MENU_CHEAT_STAMINA);
+    s.page=PAGE_FAVORITE_SEARCH;s.fav_search_mode=1;s.fav_search_category=FAV_CAT_ALL;s.fav_search_query[0]=0;
+    assert(menu_favorite_search_char(&s,'s')&&menu_favorite_search_char(&s,'t')&&menu_favorite_search_char(&s,'a')&&menu_favorite_search_char(&s,'m'));
+    s.armed=1;s.selection=1;assert(menu_button(&s,PAD_A,1)==MENU_CHEAT_STAMINA);
+    s.page=PAGE_KEYBINDS;assert(menu_rows(&s)==BIND_COUNT+1);s.selection=BIND_COUNT;s.armed=1;
+    assert(menu_button(&s,PAD_A,1)==MENU_CHANGED&&s.page==PAGE_APPEARANCE);
     s.page=PAGE_MAIN;s.topbar_tab=TOPBAR_ACTIONS;s.selection=3;s.armed=1;
     assert(menu_button(&s,PAD_A,1)==MENU_CHANGED&&s.page==PAGE_QUIT);
     s.page=PAGE_MAIN;s.selection=2;s.armed=1;
