@@ -118,6 +118,34 @@ __declspec(dllexport) int Ufc4TestStaminaDetour(unsigned char *out,size_t size){
     if(!code)return 0;
     memcpy(out,code,96);VirtualFree(code,0,MEM_RELEASE);return 1;
 }
+__declspec(dllexport) int Ufc4TestStaminaRun(unsigned mask,int side){
+    unsigned char *site=VirtualAlloc(NULL,4096,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);
+    if(!site)return -1;
+    memcpy(site,stamina_site,sizeof(stamina_site));site[sizeof(stamina_site)]=0xc3;
+    DWORD old=0;
+    if(!VirtualProtect(site,4096,PAGE_EXECUTE_READ,&old)){VirtualFree(site,0,MEM_RELEASE);return -1;}
+    unsigned char *code=make_detour(site);
+    if(!code){VirtualFree(site,0,MEM_RELEASE);return -1;}
+    *(volatile LONG*)(code+4096)=(LONG)mask;
+    struct {float value;unsigned char padding[0x114];int fighter_side;} fighter={0};
+    fighter.value=9.0f;fighter.fighter_side=side;
+    float candidate=5.0f,previous=9.0f;
+    uintptr_t after=0;void *entry=code;float *target=&fighter.value;uintptr_t *after_ptr=&after;
+    __asm__ volatile(
+        "mov %[entry], %%r11\n\t"
+        "mov %[target], %%rax\n\t"
+        "mov %[after], %%r8\n\t"
+        "vmovss %[candidate], %%xmm0\n\t"
+        "vmovss %[previous], %%xmm1\n\t"
+        "call *%%r11\n\t"
+        :
+        : [entry]"m"(entry),[target]"m"(target),[after]"m"(after_ptr),
+          [candidate]"m"(candidate),[previous]"m"(previous)
+        : "rax","r8","r11","xmm0","xmm1","cc","memory");
+    int result=(int)fighter.value;
+    VirtualFree(code,0,MEM_RELEASE);VirtualFree(site,0,MEM_RELEASE);
+    return result;
+}
 #endif
 
 int ufc4_live_stamina_prepare(void){

@@ -6,6 +6,21 @@ import unittest
 
 
 class LiveStaminaCodeTest(unittest.TestCase):
+    def test_detour_executes_original_and_selected_fighter_paths(self):
+        dll = pathlib.Path(__file__).resolve().parents[1] / "dist" / "ufc4_actions_core_test.dll"
+        core = ctypes.WinDLL(str(dll))
+        run = core.Ufc4TestStaminaRun
+        run.argtypes = [ctypes.c_uint, ctypes.c_int]
+        run.restype = ctypes.c_int
+        expected = {
+            (0, 0): 5, (0, 1): 5,
+            (1, 0): 9, (1, 1): 5,
+            (2, 0): 5, (2, 1): 9,
+            (3, 0): 9, (3, 1): 9,
+        }
+        for (mask, side), value in expected.items():
+            self.assertEqual(run(mask, side), value)
+
     def test_left_right_and_original_store_paths(self):
         dll = pathlib.Path(__file__).resolve().parents[1] / "dist" / "ufc4_actions_core_test.dll"
         core = ctypes.WinDLL(str(dll))

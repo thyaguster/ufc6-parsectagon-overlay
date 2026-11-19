@@ -4,7 +4,7 @@
 
 PORTHEON's UFC 4 port reads `%LOCALAPPDATA%\UFC4Native\cheats.json` during its game-image link step. Its bundled `ufc4-cheats.json` defines `ufc4_stamina_left` and `ufc4_stamina_right`, but those startup selections do not meet the overlay's live-cheat requirement. The UFC 4 menu no longer writes this file. The local config remains with an empty `enabled` list.
 
-On the local v28 prepared game image, the stamina hook pattern has exactly one match. An offline call to PORTHEON's own cheat linker applied the left, right, and combined blocks with no skipped hooks. The first runtime hook caused repeatable fight-start guest faults even when its selection was Off. The installed core was rolled back to the verified pre-hook build. A revised detour avoids stack writes and skips the fighter-side read when Off, but is **disabled in default builds** until a controlled in-game test establishes that the rollback restores normal fights. Use `build.ps1 -ExperimentalLiveStamina` only for that explicit test.
+On the local v28 prepared game image, the stamina hook pattern has exactly one match. An offline call to PORTHEON's own cheat linker applied the left, right, and combined blocks with no skipped hooks. The first runtime hook caused repeatable fight-start guest faults even when its selection was Off. Restoring the verified pre-hook DLL let a fight start normally, confirming the new build caused the crash. A revised detour avoids stack writes and skips the fighter-side read when Off. It passes isolated execution tests for Off, left, right, and both-fighter paths, but is **disabled in default builds** pending an in-game test. Use `build.ps1 -ExperimentalLiveStamina` only for that explicit test.
 
 The port also bundles an experimental damage pack for head, body, and legs. Its own description says the v28 adaptation has not been tested in a fight. The overlay does not expose it yet. No bundled career money or skill-point cheat was found. UFC 6's memory addresses and hooks cannot be reused in UFC 4's native port.
 
@@ -14,5 +14,5 @@ The local save contains `PROFILE` and `EXTRADATA0` data/index pairs. A read-only
 
 - The former startup-config helper and UI were removed after the user clarified the live-cheat requirement.
 - The stamina hook/link test used the installed v28 game's prepared image without writing to the game or saves.
-- The first live UFC 4 Cheats page failed its in-game fight-start test. The offline synthetic hook tests did not catch the game fault. A revised detour passes those synthetic tests but has not been installed or tested in UFC 4.
-- The verified pre-hook core DLL was restored while UFC 4 was closed. The local PORTHEON startup cheat selection is empty; the pre-reset config is backed up in the ignored build folder.
+- The first live UFC 4 Cheats page failed its in-game fight-start test. The earlier synthetic hook tests did not execute the detour and missed the stack flaw. The revised detour now has execution tests, but has not been installed or tested in UFC 4.
+- The verified pre-hook core DLL restored normal fights. A new safe build with focus muting and the hook disabled was then installed while UFC 4 was closed; its in-game fight and audio checks are pending. The local PORTHEON startup cheat selection is empty; the pre-reset config is backed up in the ignored build folder.
