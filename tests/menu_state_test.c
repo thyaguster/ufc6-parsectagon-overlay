@@ -418,6 +418,10 @@ int main(void) {
     s.page=PAGE_FAVORITE_SEARCH;s.fav_search_mode=1;s.fav_search_category=FAV_CAT_ALL;s.fav_search_query[0]=0;s.fav_carousel_index=15;
     s.selection=1;s.armed=1;assert(menu_button(&s,PAD_RIGHT,1)==MENU_CHANGED&&s.fav_carousel_index==16);
     s.armed=1;assert(menu_button(&s,PAD_A,1)==MENU_CHANGED&&s.fav_search_query[0]=='q');
+    s.armed=1;assert(menu_button(&s,PAD_Y,1)==MENU_CHANGED&&s.fav_search_query[1]==' ');
+    s.armed=1;assert(menu_button(&s,PAD_X,1)==MENU_CHANGED&&s.fav_search_query[1]==0);
+    s.armed=1;assert(menu_button(&s,PAD_LB,1)==MENU_CHANGED&&s.fav_search_query[0]==0);
+    s.armed=1;assert(menu_button(&s,PAD_A,1)==MENU_CHANGED&&s.fav_search_query[0]=='q');
     s.selection=2;s.armed=1;assert(menu_button(&s,PAD_A,1)==MENU_CHANGED&&s.page==PAGE_QUIT);
     s.page=PAGE_KEYBINDS;assert(menu_rows(&s)==BIND_COUNT+1);s.selection=BIND_COUNT;s.armed=1;
     assert(menu_button(&s,PAD_A,1)==MENU_CHANGED&&s.page==PAGE_CONTROLS);

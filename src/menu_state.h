@@ -13,7 +13,7 @@
 
 enum {
     PAD_MENU=0x8, PAD_UP=0x10, PAD_RIGHT=0x20, PAD_DOWN=0x40, PAD_LEFT=0x80,
-    PAD_LB=0x400, PAD_RB=0x800, PAD_B=0x2000, PAD_A=0x4000,
+    PAD_LB=0x400, PAD_RB=0x800, PAD_Y=0x1000, PAD_B=0x2000, PAD_A=0x4000, PAD_X=0x8000,
     OPEN_CHORD=PAD_LB|PAD_RB|PAD_MENU,
     SHORTCUT_BUTTONS=0x0000fcfe
 };
@@ -748,6 +748,9 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
     if(s->page==PAGE_FAVORITE_SEARCH){
         int ids[FAV_CATALOG_COUNT];
         int count=fav_filter_items(s->fav_search_category,s->fav_search_query,ids,FAV_CATALOG_COUNT);
+        if(button==PAD_X){if(fav_query_backspace(s->fav_search_query)){if(s->selection>1)s->selection=1;s->armed=0;return MENU_CHANGED;}return MENU_NONE;}
+        if(button==PAD_Y){if(fav_query_append(' ',s->fav_search_query,sizeof(s->fav_search_query))){if(s->selection>1)s->selection=1;s->armed=0;return MENU_CHANGED;}return MENU_NONE;}
+        if(button==PAD_LB||button==PAD_RB){if(s->fav_search_query[0]){s->fav_search_query[0]=0;if(s->selection>1)s->selection=1;s->armed=0;return MENU_CHANGED;}return MENU_NONE;}
         if(s->selection==0&&(button==PAD_LEFT||button==PAD_RIGHT)){
             s->fav_search_category=(s->fav_search_category+(button==PAD_LEFT?FAV_CAT_COUNT-1:1))%FAV_CAT_COUNT;
             s->selection=0;s->armed=0;return MENU_CHANGED;

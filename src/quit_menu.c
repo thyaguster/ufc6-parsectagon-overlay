@@ -572,8 +572,8 @@ static void action(int result) {
     if (result != MENU_NONE) PostThreadMessageW(ui_thread, WM_MENU_ACTION, result, 0);
 }
 static void navigate_device(int index,uint32_t pressed,int stick){
-    const uint32_t navigation[]={PAD_B,PAD_LB,PAD_RB,PAD_UP,PAD_DOWN,PAD_LEFT,PAD_RIGHT,PAD_A};
-    if(wait_access_release||!native_allowed(&devices[index])||launcher_setup_active||input_redirected()||!menu.visible||!menu.armed||menu.capturing||!(pressed&(PAD_B|PAD_LB|PAD_RB|PAD_UP|PAD_DOWN|PAD_LEFT|PAD_RIGHT|PAD_A)))return;
+    const uint32_t navigation[]={PAD_B,PAD_LB,PAD_RB,PAD_UP,PAD_DOWN,PAD_LEFT,PAD_RIGHT,PAD_A,PAD_X,PAD_Y};
+    if(wait_access_release||!native_allowed(&devices[index])||launcher_setup_active||input_redirected()||!menu.visible||!menu.armed||menu.capturing||!(pressed&(PAD_B|PAD_LB|PAD_RB|PAD_UP|PAD_DOWN|PAD_LEFT|PAD_RIGHT|PAD_A|PAD_X|PAD_Y)))return;
     if(raw_navigation){
         if(raw_owner>=0)return;
         /* Guide can be reported by an XInput bridge while actual navigation
@@ -2169,7 +2169,14 @@ static void draw_menu(HDC dc, RECT r) {
         static const wchar_t *category_values[]={L"Theme & size",L"Input",L"Startup",L"Files",L"Graphics",L"Parsectagon",L"Return"};
         int section=state.page==PAGE_SETTINGS_HOME?0:state.page==PAGE_APPEARANCE?1:state.page==PAGE_CONTROLS?2:state.page==PAGE_GAME_SETTINGS?3:state.page==PAGE_TOOLS?4:5;
         const wchar_t *page_title=state.page==PAGE_SETTINGS?L"All settings":state.page==PAGE_THEME?L"Theme":state.page==PAGE_KEYBINDS?L"Keybinds":state.page==PAGE_BINDING?binding_names[state.binding_action]:state.page==PAGE_GAME_ICONS?L"Game input icons":state.page==PAGE_STARTUP?L"Startup screens":state.page==PAGE_PERFORMANCE?L"Performance":state.page==PAGE_CHEATS?L"Cheats":state.page==PAGE_BACKUPS?L"Savegame backups":state.page==PAGE_PHOTO?L"Photo Mode":state.page==PAGE_PHOTO_CONTROLS?L"Photo controls":state.page==PAGE_PHOTO_EFFECTS?L"Filters & effects":state.page==PAGE_PHOTO_WATERMARK?L"Photo watermark":state.page==PAGE_FAVORITE_SEARCH?(state.fav_search_mode?L"Search features":L"Favorites & search"):titles[section];
-        const wchar_t *page_description=state.page==PAGE_SETTINGS?L"Browse all overlay and system options":state.page==PAGE_THEME?L"Choose a color preset":state.page==PAGE_KEYBINDS?L"Assign keyboard keys and controller combinations":state.page==PAGE_BINDING?L"Record or clear an input":state.page==PAGE_GAME_ICONS?L"Choose prompts and edit game mappings":state.page==PAGE_STARTUP?L"Manage title and network bypass":state.page==PAGE_PERFORMANCE?L"PORTHEON graphics options; restart to apply":state.page==PAGE_CHEATS?L"Fight and career options for Player 1":state.page==PAGE_BACKUPS?L"Save in UFC 6 before backing up":state.page==PAGE_PHOTO?L"Camera, freeze and capture controls":state.page==PAGE_PHOTO_CONTROLS?L"Close the overlay to control the camera":state.page==PAGE_PHOTO_EFFECTS?L"Adjust effects while Photo Mode is active":state.page==PAGE_PHOTO_WATERMARK?L"Style the name used in screenshots":state.page==PAGE_FAVORITE_SEARCH?(state.fav_search_mode?L"Left/Right picks a letter, A enters it, or select a result":L"Left/Right picks a letter, A enters it, or A on a result pins it"):descriptions[section];
+        wchar_t fav_tip[128]={0};
+        if(state.page==PAGE_FAVORITE_SEARCH){
+            const wchar_t *del_btn=ps==OVERLAY_ICONS_PLAYSTATION?L"Square":L"X";
+            const wchar_t *sp_btn=ps==OVERLAY_ICONS_PLAYSTATION?L"Triangle":L"Y";
+            const wchar_t *clr_btn=ps==OVERLAY_ICONS_PLAYSTATION?L"L1/R1":L"LB/RB";
+            swprintf(fav_tip,128,L"A: Enter letter / %ls  •  %ls: Backspace  •  %ls: Space  •  %ls: Clear",state.fav_search_mode?L"Open":L"Pin",del_btn,sp_btn,clr_btn);
+        }
+        const wchar_t *page_description=state.page==PAGE_SETTINGS?L"Browse all overlay and system options":state.page==PAGE_THEME?L"Choose a color preset":state.page==PAGE_KEYBINDS?L"Assign keyboard keys and controller combinations":state.page==PAGE_BINDING?L"Record or clear an input":state.page==PAGE_GAME_ICONS?L"Choose prompts and edit game mappings":state.page==PAGE_STARTUP?L"Manage title and network bypass":state.page==PAGE_PERFORMANCE?L"PORTHEON graphics options; restart to apply":state.page==PAGE_CHEATS?L"Fight and career options for Player 1":state.page==PAGE_BACKUPS?L"Save in UFC 6 before backing up":state.page==PAGE_PHOTO?L"Camera, freeze and capture controls":state.page==PAGE_PHOTO_CONTROLS?L"Close the overlay to control the camera":state.page==PAGE_PHOTO_EFFECTS?L"Adjust effects while Photo Mode is active":state.page==PAGE_PHOTO_WATERMARK?L"Style the name used in screenshots":state.page==PAGE_FAVORITE_SEARCH?fav_tip:descriptions[section];
         int fav_ids[FAV_CATALOG_COUNT];
         int fav_match_count=state.page==PAGE_FAVORITE_SEARCH?fav_filter_items(state.fav_search_category,state.fav_search_query,fav_ids,FAV_CATALOG_COUNT):0;
         RECT panel={24,16,r.right-24,r.bottom-16};
@@ -2191,13 +2198,33 @@ static void draw_menu(HDC dc, RECT r) {
             row_surface(dc,row,bindings.box_style,bindings.box_style==3?18:7,focused?paint_theme.focus:RGB(15,20,28),focused?paint_theme.focus_border:paint_theme.border);
             if(focused){RECT marker={row.left+1,top+7,row.left+4,top+35};HBRUSH b=CreateSolidBrush(paint_theme.accent);FillRect(dc,&marker,b);DeleteObject(b);}
             int id=menu_setting_page(state.page)?menu_setting_id(state.page,i):-1;
+            if(state.page==PAGE_FAVORITE_SEARCH&&i==1){
+                wchar_t qlabel[64]={0};
+                if(state.fav_search_query[0]){wchar_t q[36]={0};for(int k=0;state.fav_search_query[k]&&k<31;++k)q[k]=(wchar_t)(unsigned char)state.fav_search_query[k];swprintf(qlabel,64,L"\"%ls\"",q);}
+                else wcscpy(qlabel,L"Type or spin");
+                RECT qbox={row.left+18,top+2,row.left+196,top+40};
+                text(dc,font_main,qlabel,qbox,state.fav_search_query[0]?(focused?RGB(255,255,255):paint_theme.text):paint_theme.muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
+                int strip_left=row.left+204,strip_right=row.right-16,slots=11,slot_w=(strip_right-strip_left)/slots;
+                for(int sidx=0;sidx<slots;++sidx){
+                    int offset=sidx-5;
+                    int cidx=(state.fav_carousel_index+offset+FAV_CAROUSEL_COUNT)%FAV_CAROUSEL_COUNT;
+                    wchar_t ch[2]={(wchar_t)(unsigned char)fav_carousel_char(cidx),0};
+                    int sx=strip_left+sidx*slot_w;
+                    RECT sb={sx+1,top+5,sx+slot_w-1,top+37};
+                    if(offset==0){
+                        row_surface(dc,sb,bindings.box_style,bindings.box_style==3?10:6,focused?paint_theme.accent:paint_theme.focus,paint_theme.focus_border);
+                        text(dc,font_main,ch,sb,RGB(255,255,255),DT_CENTER|DT_VCENTER|DT_SINGLELINE);
+                    }else{
+                        COLORREF col=(offset>=-2&&offset<=2)?paint_theme.text:paint_theme.muted;
+                        text(dc,font_small,ch,sb,col,DT_CENTER|DT_VCENTER|DT_SINGLELINE);
+                    }
+                }
+                continue;
+            }
             wchar_t fav_row_label[96]={0};
             if(state.page==PAGE_FAVORITE_SEARCH){
                 if(i==0)wcscpy(fav_row_label,L"Category");
-                else if(i==1){
-                    if(state.fav_search_query[0]){wchar_t q[36]={0};for(int k=0;state.fav_search_query[k]&&k<31;++k)q[k]=(wchar_t)(unsigned char)state.fav_search_query[k];swprintf(fav_row_label,96,L"Search: \"%ls\"",q);}
-                    else wcscpy(fav_row_label,L"Search letter (Left/Right, A)");
-                }else if(i==fav_match_count+2)wcscpy(fav_row_label,state.fav_search_mode?L"Back":L"Back to Favorites");
+                else if(i==fav_match_count+2)wcscpy(fav_row_label,state.fav_search_mode?L"Back":L"Back to Favorites");
                 else{const FavoriteCatalogItem *it=fav_catalog_item(fav_ids[i-2]);if(it)wcscpy(fav_row_label,it->label);}
             }
             const wchar_t *label=state.page==PAGE_FAVORITE_SEARCH?fav_row_label:state.page==PAGE_SETTINGS_HOME?category_names[i]:state.page==PAGE_THEME?theme_choices[i]:state.page==PAGE_KEYBINDS?(i==BIND_COUNT?L"Back":binding_names[i]):state.page==PAGE_BINDING?binding_labels[i]:state.page==PAGE_GAME_ICONS?game_icons_labels[i]:state.page==PAGE_STARTUP?startup_labels[i]:state.page==PAGE_PERFORMANCE?performance_labels[i]:state.page==PAGE_CHEATS?cheat_labels[i]:state.page==PAGE_BACKUPS?backup_labels[i]:state.page==PAGE_PHOTO?photo_labels[i]:state.page==PAGE_PHOTO_CONTROLS?photo_control_labels[i]:state.page==PAGE_PHOTO_EFFECTS?effect_labels[i]:state.page==PAGE_PHOTO_WATERMARK?mark_labels[i]:setting_labels[id];
@@ -3256,13 +3283,13 @@ static void tick(void) {
                 for(int slot=0;slot<4;++slot){
                     uint32_t buttons=raw_connected[slot]?raw_menu_buttons(slot):0;
                     uint32_t pressed=buttons&~raw_idle_previous[slot];
-                    if(raw_owner<0&&raw_allowed(slot)&&controller_active&&menu.armed&&(pressed&(PAD_B|PAD_LB|PAD_RB|PAD_UP|PAD_DOWN|PAD_LEFT|PAD_RIGHT|PAD_A))){raw_owner=slot;raw_previous=raw_idle_previous[slot];log_line("Guide navigation acquired through XInput.");}
+                    if(raw_owner<0&&raw_allowed(slot)&&controller_active&&menu.armed&&(pressed&(PAD_B|PAD_LB|PAD_RB|PAD_UP|PAD_DOWN|PAD_LEFT|PAD_RIGHT|PAD_A|PAD_X|PAD_Y))){raw_owner=slot;raw_previous=raw_idle_previous[slot];log_line("Guide navigation acquired through XInput.");}
                     raw_idle_previous[slot]=buttons;
                 }
             }
             uint32_t buttons=raw_owner>=0&&raw_connected[raw_owner]?raw_menu_buttons(raw_owner):0;
             uint32_t pressed=buttons&~raw_previous;
-            const uint32_t navigation[]={PAD_B,PAD_LB,PAD_RB,PAD_UP,PAD_DOWN,PAD_LEFT,PAD_RIGHT,PAD_A};
+            const uint32_t navigation[]={PAD_B,PAD_LB,PAD_RB,PAD_UP,PAD_DOWN,PAD_LEFT,PAD_RIGHT,PAD_A,PAD_X,PAD_Y};
             if(controller_active&&menu.visible&&menu.online_takeover&&menu.layout_style==LAYOUT_CLASSIC&&(pressed&(PAD_LB|PAD_RB))){
                 action(menu_close(&menu,MENU_RESUME));menu.draining=0;
             }

@@ -166,31 +166,40 @@ static inline void fav_deserialize(const wchar_t *in, int *favs, int *count) {
     }
 }
 enum {
-    FAV_CAROUSEL_COUNT = 39
+    FAV_CAROUSEL_COUNT = 36
 };
 
-static inline void fav_carousel_label(int idx, wchar_t *out, size_t cap) {
-    if (!out || cap == 0) return;
+static inline char fav_carousel_char(int idx) {
     int i = ((idx % FAV_CAROUSEL_COUNT) + FAV_CAROUSEL_COUNT) % FAV_CAROUSEL_COUNT;
-    if (i < 26) { out[0] = (wchar_t)(L'A' + i); out[1] = 0; }
-    else if (i < 36) { out[0] = (wchar_t)(L'0' + (i - 26)); out[1] = 0; }
-    else if (i == 36) swprintf(out, cap, L"Space");
-    else if (i == 37) swprintf(out, cap, L"Backspace");
-    else swprintf(out, cap, L"Clear");
+    return (i < 26) ? (char)('A' + i) : (char)('0' + (i - 26));
+}
+
+static inline void fav_carousel_label(int idx, wchar_t *out, size_t cap) {
+    if (!out || cap < 2) return;
+    out[0] = (wchar_t)(unsigned char)fav_carousel_char(idx);
+    out[1] = 0;
+}
+
+static inline int fav_query_append(char ch, char *query, size_t cap) {
+    if (!query || cap == 0) return 0;
+    size_t len = 0;
+    while (query[len] && len + 1 < cap) ++len;
+    if (len + 1 >= cap) return 0;
+    if (ch == ' ' && (len == 0 || query[len - 1] == ' ')) return 0;
+    query[len] = (char)fav_ascii_lower((int)(unsigned char)ch);
+    query[len + 1] = 0;
+    return 1;
 }
 
 static inline int fav_carousel_apply(int idx, char *query, size_t cap) {
-    if (!query || cap == 0) return 0;
-    int i = ((idx % FAV_CAROUSEL_COUNT) + FAV_CAROUSEL_COUNT) % FAV_CAROUSEL_COUNT;
+    return fav_query_append(fav_carousel_char(idx), query, cap);
+}
+
+static inline int fav_query_backspace(char *query) {
+    if (!query || !query[0]) return 0;
     size_t len = 0;
-    while (query[len] && len + 1 < cap) ++len;
-    if (i == 38) { if (len == 0) return 0; query[0] = 0; return 1; }
-    if (i == 37) { if (len == 0) return 0; query[len - 1] = 0; return 1; }
-    if (len + 1 >= cap) return 0;
-    char ch = (i < 26) ? (char)('a' + i) : (i < 36) ? (char)('0' + (i - 26)) : ' ';
-    if (ch == ' ' && len == 0) return 0;
-    query[len] = ch;
-    query[len + 1] = 0;
+    while (query[len]) ++len;
+    query[len - 1] = 0;
     return 1;
 }
 #endif
