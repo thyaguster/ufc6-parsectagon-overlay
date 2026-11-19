@@ -1,4 +1,4 @@
-/* PS5 Pro host: mute only this process's independent Windows audio sessions. */
+/* Mute only this process's independent Windows audio sessions. */
 #define WIN32_LEAN_AND_MEAN
 #define CINTERFACE
 #include <windows.h>

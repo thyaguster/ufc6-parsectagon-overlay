@@ -6,7 +6,9 @@ PORTHEON's UFC 4 port reads `%LOCALAPPDATA%\UFC4Native\cheats.json` during its g
 
 On the local v28 prepared game image, the stamina hook pattern has exactly one match. An offline call to PORTHEON's own cheat linker applied the left, right, and combined blocks with no skipped hooks. This checks linking against the installed image; it does not establish how the cheat behaves in a fight. The image linker ran at the last observed game launch, so saved selections are presented as **Next launch: On/Off**.
 
-The port also bundles an experimental damage pack for head, body, and legs. Its own description says the v28 adaptation has not been tested in a fight. The overlay does not expose it yet. No bundled career money or skill-point cheat was found. UFC 6's memory addresses and hooks cannot be reused in UFC 4's native port; career changes need a separate, read-only schema investigation before any write path is added.
+The port also bundles an experimental damage pack for head, body, and legs. Its own description says the v28 adaptation has not been tested in a fight. The overlay does not expose it yet. No bundled career money or skill-point cheat was found. UFC 6's memory addresses and hooks cannot be reused in UFC 4's native port.
+
+The local save contains `PROFILE` and `EXTRADATA0` data/index pairs. A read-only header and keyword check found career-related strings in `PROFILE`, but no identified money or skill-point field. That is insufficient to edit a save safely. Career values need a controlled before/after save comparison and a backup before a write path is considered.
 
 ## Test status
 
