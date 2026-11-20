@@ -281,6 +281,15 @@ namespace UFC6OverlaySetup {
                 throw;
             } finally { foreach (string path in staged.Values) { try { if (File.Exists(path)) File.Delete(path); } catch { } } }
             if (remove) foreach (string path in backups.Values) { try { File.Delete(path); } catch { /* The mod is removed; leave any locked backup in place. */ } }
+            try {
+                string manifest = Path.Combine(folder,"ufc6_menu_layer.json");
+                using (var key = Microsoft.Win32.Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Khronos\Vulkan\ImplicitLayers",true)) {
+                    if (key != null) {
+                        if (remove) key.DeleteValue(manifest,false);
+                        else key.SetValue(manifest,0,Microsoft.Win32.RegistryValueKind.DWord);
+                    }
+                }
+            } catch { /* HKLM registration requires admin; version.dll also registers when the game runs elevated. */ }
             return remove ? "Overlay removed. Settings, screenshots, and upgrade backups were kept." : "Overlay v" + Version + " installed.\r\nLaunch UFC 6 normally, then hold LB + RB + Menu for about one second, or press F10.\r\n\r\nSettings and screenshots were kept. Recognized older files were backed up.";
         }
     }

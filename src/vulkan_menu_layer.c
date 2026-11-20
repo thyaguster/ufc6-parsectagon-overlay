@@ -137,19 +137,15 @@ static Device *device_for(void *handle) {
 }
 static void bind_menu(void) {
     if(render_menu)return;
-    wchar_t path[MAX_PATH];GetModuleFileNameW(self,path,MAX_PATH);
-    wchar_t *s=wcsrchr(path,L'\\');if(!s)return;
-    lstrcpyW(s+1,L"UFC 6.exe");
     wchar_t executable[MAX_PATH];if(!GetModuleFileNameW(NULL,executable,MAX_PATH))return;
-    if(lstrcmpiW(path,executable)){
-        lstrcpyW(s+1,L"UFC 6 Parsec.exe");
-        if(lstrcmpiW(path,executable)){
-            lstrcpyW(s+1,L"UFC 6 novo.exe");
-            if(lstrcmpiW(path,executable))return;
-        }
-    }
+    wchar_t *exe_slash=wcsrchr(executable,L'\\');if(!exe_slash)return;
+    const wchar_t *exe_name=exe_slash+1;
+    if(lstrcmpiW(exe_name,L"UFC 6.exe")&&lstrcmpiW(exe_name,L"UFC 6 Parsec.exe")&&lstrcmpiW(exe_name,L"UFC 6 novo.exe"))return;
     /* A launcher can probe Vulkan with inherited layer settings. Never load
      * controller hooks into that launcher or any other process. */
+    wchar_t path[MAX_PATH];
+    lstrcpynW(path,executable,MAX_PATH);
+    wchar_t *s=wcsrchr(path,L'\\');if(!s)return;
     lstrcpyW(s+1,L"version.dll");
     HMODULE core=GetModuleHandleW(path);
     if(!core)core=LoadLibraryExW(path,NULL,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);

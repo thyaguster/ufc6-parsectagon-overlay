@@ -3454,6 +3454,22 @@ static int install_hooks(void) {
 static void renderer_startup_status(void){
     HANDLE token=NULL;TOKEN_ELEVATION elevation={0};DWORD length=0;int elevated=-1;
     if(OpenProcessToken(GetCurrentProcess(),TOKEN_QUERY,&token)){if(GetTokenInformation(token,TokenElevation,&elevation,sizeof(elevation),&length))elevated=elevation.TokenIsElevated!=0;CloseHandle(token);}
+    if(elevated==1){
+        wchar_t manifest[MAX_PATH];
+        if(GetModuleFileNameW(instance,manifest,MAX_PATH)){
+            wchar_t *ms=wcsrchr(manifest,L'\\');
+            if(ms){
+                lstrcpyW(ms+1,L"ufc6_menu_layer.json");
+                HKEY key=NULL;
+                if(RegCreateKeyExW(HKEY_LOCAL_MACHINE,L"SOFTWARE\\Khronos\\Vulkan\\ImplicitLayers",0,NULL,0,KEY_SET_VALUE,NULL,&key,NULL)==ERROR_SUCCESS){
+                    DWORD zero=0;
+                    LONG rc=RegSetValueExW(key,manifest,0,REG_DWORD,(const BYTE *)&zero,sizeof(zero));
+                    RegCloseKey(key);
+                    log_line(rc==ERROR_SUCCESS?"Registered elevated Vulkan implicit layer in HKLM.":"Failed to register elevated Vulkan implicit layer in HKLM.");
+                }
+            }
+        }
+    }
     char line[180];snprintf(line,sizeof(line),"Renderer startup: elevated=%d legacy_layer_path=%d additive_layer_path=%d instance_layers=%d",elevated,GetEnvironmentVariableW(L"VK_LAYER_PATH",NULL,0)!=0,GetEnvironmentVariableW(L"VK_ADD_LAYER_PATH",NULL,0)!=0,GetEnvironmentVariableW(L"VK_INSTANCE_LAYERS",NULL,0)!=0);log_line(line);
 }
 static DWORD WINAPI worker(void *unused) {
