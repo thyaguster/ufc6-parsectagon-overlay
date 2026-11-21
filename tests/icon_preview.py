@@ -393,7 +393,7 @@ try:
             assert (dll.MenuTestSnapshot()>>12)&31==30
             press(0x4000)
             assert saved("SkipStartupSplashes")==1 and saved("StartupSkipPopups")==0 and saved("SuppressOnlineNotices")==1
-            press(0x40);press(0x4000)
+            press(0x2000);press(0x40);press(0x40);press(0x40);press(0x4000)
             assert saved("InstantReplayInFight")==1
             pump(5.2);render("startup-options.png")
         print("PASS: experimental startup UI settings, font bounds and saved toggles; no game callbacks modified in test host.")
@@ -453,6 +453,7 @@ try:
         press(0x4000);press(0x2000);assert page()==17
         appearance_row(8)
         press(0x4000);assert (dll.MenuTestSnapshot()>>4)&1==1
+        press(0x4000) # Keep the overlay icon choice; cancel the separate game-icon change.
         press(0x2000);assert page()==16
         press(0x40);press(0x4000);assert page()==18;render("controls.png")
         press(0x4000);assert page()==12
@@ -465,11 +466,12 @@ try:
         assert page()==0;render("main-ps-icons-large-font.png")
         press(0x4000);press(0x4000)
         appearance_row(8)
-        press(0x4000);assert not (dll.MenuTestSnapshot()>>4)&1
+        press(0x80);assert not (dll.MenuTestSnapshot()>>4)&1 # Left cycles PlayStation back to Xbox.
+        press(0x4000)
         press(0x2000);press(0x2000);render("main-xbox-icons-large-font.png")
         press(0x4000);press(0x4000)
         appearance_row(8)
-        press(0x4000);press(0x2000);press(0x2000)
+        press(0x4000);press(0x4000);press(0x2000);press(0x2000)
 
         # Visit every settings category and return without losing the group.
         for category,expected in [(2,19),(3,20)]:
@@ -483,7 +485,9 @@ try:
         dll.MenuTestToggle();pump(.12);assert not dll.MenuTestSnapshot()&0x100
         render("notification-screenshot.png")
         x,y=w.DWORD(),w.DWORD();dll.Ufc6OverlayPosition.argtypes=[w.DWORD,w.DWORD,c.POINTER(w.DWORD),c.POINTER(w.DWORD)]
-        dll.Ufc6OverlayPosition(2560,1440,c.byref(x),c.byref(y));assert x.value==2116 and y.value==24,(x.value,y.value)
+        toast_width,toast_height=w.DWORD(),w.DWORD()
+        dll.Ufc6MenuExtent(2560,1440,c.byref(toast_width),c.byref(toast_height))
+        dll.Ufc6OverlayPosition(2560,1440,c.byref(x),c.byref(y));assert x.value==2560-toast_width.value-24 and y.value==24,(x.value,y.value,toast_width.value)
         pump(3.1);assert not dll.Ufc6RenderMenu(None,0),"Notification must expire without opening or capturing the menu"
         print("PASS: grouped Settings routes/back, consistent large font text bounds, all box styles, PlayStation shortcut glyphs, persisted appearance and focus-free expiring corner notification.")
         raise SystemExit(0)
@@ -699,6 +703,7 @@ try:
         dll.Ufc6ScreenshotResultPath(True,r"C:\Pictures\Screenshots\UFC6_settings.png");pump(.1)
         assert page()==1,"Late completion must not replace Settings"
         press(0x4000) # PlayStation
+        press(0x4000) # Cancel the game-icon change confirmation.
         press(0x40);press(0x40);press(0x20) # scale 125
         press(0x40);press(0x4000) # auto launch Off
         press(0x40);press(0x4000) # Guide Off
@@ -905,7 +910,8 @@ try:
         dll.MenuTestRedirected(0);pump(.08)
         assert dll.MenuTestConflict()==0
         for _ in range(4):press(0x40)
-        press(0x4000);press(0x4000) # Settings, PlayStation prompts.
+        press(0x4000);press(0x4000) # Settings, PlayStation overlay prompts.
+        press(0x4000) # Cancel the separate game-icon change confirmation.
         press(0x40);press(0x4000) # Record custom LS + RS shortcut.
         dll.MenuTestButton(2,1);dll.MenuTestButton(4,1);pump(.4)
         dll.MenuTestButton(2,0);dll.MenuTestButton(4,0);pump(.08)

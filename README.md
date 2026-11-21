@@ -76,6 +76,8 @@ Use **LB / RB** (or **L1 / R1** on PlayStation) to switch tabs, **D-Pad / Left S
 | ![Game & Launcher](docs/screenshots/showcase/page-game-launcher.png) | ![Performance](docs/screenshots/showcase/page-performance.png) |
 | **Files & Support** | **Photo Effects & Filters** |
 | ![Files & Support](docs/screenshots/showcase/page-files-support.png) | ![Photo Effects](docs/screenshots/showcase/page-photo-effects.png) |
+| **FPV / POV Camera (Beta)** | **Setup & Clean Kyty Installer** |
+| ![FPV Camera](docs/screenshots/showcase/tab-photo-fpv.png) | ![Setup](docs/screenshots/setup.png) |
 
 ---
 

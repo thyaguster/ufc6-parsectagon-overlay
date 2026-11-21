@@ -1,3 +1,11 @@
+## v0.9.88 — Experimental FPV Camera, Clean Kyty Setup, & Polish
+
+- **Experimental FPV / POV Camera (Beta)** in the Photo tab: switch between `Off`, `Fighter 1`, and `Fighter 2` first-person views with configurable smoothing, FOV (`60°–110°`), Pitch, Eye Height, Forward/Back offset, Grapple Auto-Exit distance (`0.45–1.00 m`), automatic octagon cage visibility, and persistent `ufc6_fpv.ini` settings.
+- **Clean Kyty (`kyty_emulator.exe`) support**: Setup installs and removes cleanly without touching stock `libwinpthread-1.dll`, uses non-admin `HKCU` + `VK_ADD_IMPLICIT_LAYER_PATH` Vulkan layer registration, and includes quick links for **Parsectagon.cc** and **Discord**.
+- **Instant Replay** moved out of Experimental into **Game & Launcher** settings.
+- **Career Sparring Stamina** fix: handles default `player = -1` nodes cleanly.
+- **Mute on Minimize recovery**: automatically unmutes any leftover process Windows audio sessions on startup if the game previously exited or crashed while minimized.
+
 ## v0.9.85 — Documents folder branding
 
 - Save support reports, save backups, and fight reports under `Documents/UFC 6 Parsectagon Overlay`, and use the same name for the update download cache. Existing files stay in their old folders; the overlay still reads older fight reports when the new folder has none.
