@@ -242,6 +242,22 @@ namespace UFC6OverlaySetup {
                 Assert(embedded.new_engine!=null,"Bundled release must describe the verified PS5 Pro engine.");
                 new Manager(embedded.new_engine,embedded.new_engine.companion_files.Keys.Concat(new [] {"version.dll"}).ToDictionary(n=>n,n=>Program.Resource(n)),"UFC 6 novo.exe","PORTHEON PS5 Pro / DLSS");
                 passed.Add("PASS: all actual bundled release files match the embedded manifest.");
+
+                string cleanKyty = Path.Combine(root,"KytyPS5");
+                Directory.CreateDirectory(cleanKyty);
+                File.WriteAllBytes(Path.Combine(cleanKyty,"kyty_emulator.exe"),Encoding.UTF8.GetBytes("clean-kyty"));
+                byte[] stockPthread = Encoding.UTF8.GetBytes("stock-libwinpthread");
+                File.WriteAllBytes(Path.Combine(cleanKyty,"libwinpthread-1.dll"),stockPthread);
+                var kytyRel = embedded.new_engine ?? embedded;
+                var kytyManager = new Manager(embedded,embedded.companion_files.Keys.Concat(new [] {"version.dll"}).ToDictionary(n=>n,n=>Program.Resource(n)));
+                kytyManager.KytyEngine = new Manager(kytyRel,kytyRel.companion_files.Keys.Concat(new [] {"version.dll"}).ToDictionary(n=>n,n=>Program.Resource(n)),"kyty_emulator.exe","Clean Kyty",true);
+                Inspection kytyInsp = kytyManager.Inspect(cleanKyty);
+                Assert(kytyInsp.CleanKyty && kytyInsp.Supported && kytyInsp.RuntimeAvailable,"Clean Kyty folder must be detected and supported without PORTHEON runtime bridge.");
+                kytyManager.ApplyAll(cleanKyty,false,false);
+                Assert(File.Exists(Path.Combine(cleanKyty,"version.dll")) && Manager.HashFile(Path.Combine(cleanKyty,"libwinpthread-1.dll")) == Manager.Hash(stockPthread),"Clean Kyty install must add overlay files and leave stock libwinpthread-1.dll untouched.");
+                kytyManager.ApplyAll(cleanKyty,true,false);
+                Assert(!File.Exists(Path.Combine(cleanKyty,"version.dll")) && Manager.HashFile(Path.Combine(cleanKyty,"libwinpthread-1.dll")) == Manager.Hash(stockPthread),"Clean Kyty remove must uninstall overlay files and keep stock libwinpthread-1.dll intact.");
+                passed.Add("PASS: Clean Kyty folder install/remove preserves stock libwinpthread-1.dll.");
                 var diagnosticHashes=new System.Web.Script.Serialization.JavaScriptSerializer().Deserialize<Dictionary<string,string>>(Encoding.UTF8.GetString(Program.Resource("diagnostics-components.json")).TrimStart('\ufeff'));
                 Assert(diagnosticHashes["version.dll"]==embedded.dll_sha256,"Diagnostic core fingerprint must match the shipped core.");
                 foreach(var item in embedded.companion_files.Where(p=>p.Key!="ufc6_menu_update.exe"))Assert(diagnosticHashes[item.Key]==item.Value,"Diagnostic companion fingerprint must match the shipped payload: "+item.Key);

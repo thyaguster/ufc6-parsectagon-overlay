@@ -6,6 +6,9 @@
     "library_path": ".\\ufc6_menu_layer.dll",
     "api_version": "1.3.0",
     "implementation_version": "1",
-    "description": "UFC 6 in-frame controller quit menu"
+    "description": "UFC 6 in-frame controller quit menu",
+    "disable_environment": {
+      "DISABLE_VK_LAYER_UFC6_quit_menu": "1"
+    }
   }
 }

@@ -16,4 +16,7 @@ int live_cheats_fight_ready(void);
 int live_ko_toggle(void);
 int live_ko_poll(int allowed); /* 0 idle, 1 armed/pending, 2 KO, 3 cancelled */
 void live_cheats_stop(LiveCheats *state);
+void live_cheats_sparring_clock_toggle(void);
+int live_cheats_sparring_clock_get(void);
+void live_cheats_sparring_clock_tick(void);
 #endif

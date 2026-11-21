@@ -36,13 +36,23 @@ void cheat_bindings_apply(CheatBindingCache *cache,uintptr_t binder,unsigned fir
     if(binding_kind(mapping)!=2||!binding_read(mapping+0x38,&map_begin,8)||!binding_read(mapping+0x40,&map_end,8)||map_end<map_begin||(map_end-map_begin)%16||map_end-map_begin>256)return;
     if(map_begin==map_end)return; /* Inactive/menu worlds must not replace live-fight observations. */
     for(uintptr_t node=map_begin;node<map_end;node+=16){uintptr_t field=0;int32_t player=-1,value=-1;
-        if(!binding_read(node,&field,8)||!binding_read(node+8,&player,4)||player<0||player>1||!binding_read(field,&value,4)||value<0||value>0xffff)return;
+        if(!binding_read(node,&field,8)||!binding_read(node+8,&player,4)||player<-1||player>1||!binding_read(field,&value,4)||value<0||value>0xffff)return;
+        if(player<0)continue;
         if(input[player]!=-1&&input[player]!=value)return;input[player]=value;
     }
-    frame->fighters_ready=input[0]>=0&&input[1]>=0;
+    frame->fighters_ready=(input[0]>=0&&input[1]>=0)||(input[0]>0&&input[1]<0)||(input[1]>0&&input[0]<0);
     frame->player_one=0;
-    if(input[0]<0||input[1]<0||!!(input[0]&1)==!!(input[1]&1))return;
-    frame->player_one=(input[0]&1)?1:2;
+    if(input[0]>=0&&input[1]>=0){
+        if(!!(input[0]&1)!=!!(input[1]&1))frame->player_one=(input[0]&1)?1:2;
+        else if((input[0]!=0)!=(input[1]!=0))frame->player_one=(input[0]!=0)?1:2;
+        else return;
+    }else if(input[0]>0&&input[1]<0){
+        frame->player_one=1;
+    }else if(input[1]>0&&input[0]<0){
+        frame->player_one=2;
+    }else{
+        return;
+    }
     for(int i=0;i<2;++i){
         size_t index=cache->index[i];if(index<first||index>=first+count)continue;
         uintptr_t record=begin+index*0x68,nodes=0,last=0;
@@ -50,19 +60,22 @@ void cheat_bindings_apply(CheatBindingCache *cache,uintptr_t binder,unsigned fir
         if(!binding_read(record+0x38,&nodes,8)||!binding_read(record+0x40,&last,8)||last<nodes||(last-nodes)%16||(last-nodes)/16>16)continue;
         /* Validate every node before writing any: non-fighter/default indices
            and malformed boolean fields make the whole record unavailable. */
-        unsigned length_nodes=(unsigned)((last-nodes)/16);int valid=1;
+        unsigned length_nodes=(unsigned)((last-nodes)/16),kept_nodes=0,seen_mask=0;int valid=1;
         for(unsigned j=0;j<length_nodes;++j){
             uintptr_t field=0;int32_t player=-1;unsigned char value=0;
-            if(!binding_read(nodes+j*16,&field,8)||!binding_read(nodes+j*16+8,&player,4)||player<0||player>1||
+            if(!binding_read(nodes+j*16,&field,8)||!binding_read(nodes+j*16+8,&player,4)||player<-1||player>1||
                !binding_read(field,&value,1)||value>1){valid=0;break;}
-            frame->field[i][j]=(CheatBindingField){field,(unsigned)player};
+            if(player<0)continue;
+            seen_mask|=1u<<(unsigned)player;
+            frame->field[i][kept_nodes++]=(CheatBindingField){field,(unsigned)player};
         }
-        if(!valid)continue;
-        frame->count[i]=length_nodes;
+        unsigned req_mask=(input[0]>=0&&input[1]>=0)?3u:(unsigned)frame->player_one;
+        if(!valid||!kept_nodes||(seen_mask&req_mask)!=req_mask)continue;
+        frame->count[i]=kept_nodes;
         unsigned logical_controlled=(command[i]>>2)&1,logical_on=(command[i]>>4)&1;
         if(logical_controlled)cache->physical_owned[i]|=(unsigned)frame->player_one;
         unsigned controlled=cache->physical_owned[i],on=logical_on?(unsigned)frame->player_one:0;
-        for(unsigned j=0;j<length_nodes;++j){
+        for(unsigned j=0;j<kept_nodes;++j){
             CheatBindingField field=frame->field[i][j];unsigned bit=1u<<field.player;
             if(controlled&bit){unsigned char value=0;unsigned char desired=(on&bit)!=0;
                 if(!binding_read(field.address,&value,1)||(value!=desired&&!binding_write(field.address,desired)))frame->failed[i]|=bit;

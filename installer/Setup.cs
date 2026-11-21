@@ -46,8 +46,10 @@ namespace UFC6OverlaySetup {
         public int TotalFiles;
         public string EngineLabel;
         public string SiblingEngineNotice;
+        public bool CleanKyty;
         public static string DescribeEngine(string folderPath,string engineLabel) {
             string leaf = string.IsNullOrEmpty(folderPath) ? "" : Path.GetFileName(folderPath.TrimEnd('\\','/'));
+            if (engineLabel != null && engineLabel.StartsWith("Clean Kyty",StringComparison.OrdinalIgnoreCase)) return string.IsNullOrEmpty(leaf) ? engineLabel : engineLabel + " (" + leaf + ")";
             if (leaf.Equals("novo",StringComparison.OrdinalIgnoreCase)) return "PS5 Pro / DLSS (novo)";
             if (leaf.Equals("bin",StringComparison.OrdinalIgnoreCase)) return "Original / Parsec (bin)";
             return string.IsNullOrEmpty(leaf) ? engineLabel : engineLabel + " (" + leaf + ")";
@@ -56,6 +58,7 @@ namespace UFC6OverlaySetup {
             var lines = new List<string>();
             string engineDisplay = DescribeEngine(Folder,EngineLabel);
             lines.Add(Supported ? "Compatible " + engineDisplay + " engine." : "Unsupported engine (" + engineDisplay + "). Installation is disabled.");
+            if (CleanKyty && Supported) lines.Add("Clean Kyty mode: installs version.dll and the Vulkan overlay layer without modifying libwinpthread-1.dll. UFC 6 hooks activate automatically when a supported UFC 6 image is loaded.");
             if (ParsecStatus != null) lines.Add(ParsecStatus);
             if (PortheonReplaced) {
                 lines.Add("PORTHEON update detected: a game update replaced overlay file(s) (" + string.Join(", ",ReplacedFiles) + ") in " + engineDisplay + ".");
@@ -83,14 +86,20 @@ namespace UFC6OverlaySetup {
         readonly string engineFile;
         readonly string engineLabel;
         public Manager NewEngine;
+        public Manager KytyEngine;
         public readonly string Version;
         // Tests inject fixture bytes and a fixture engine hash into the same transaction code.
         public Action<int> BeforeCommit;
-        public Manager(Release release, Dictionary<string,byte[]> payload) : this(release,payload,"UFC 6.exe","PORTHEON 3309ab23f") {}
-        public Manager(Release release, Dictionary<string,byte[]> payload,string executable,string label) {
+        public Manager(Release release, Dictionary<string,byte[]> payload) : this(release,payload,"UFC 6.exe","PORTHEON 3309ab23f",false) {}
+        public Manager(Release release, Dictionary<string,byte[]> payload,string executable,string label) : this(release,payload,executable,label,false) {}
+        public Manager(Release release, Dictionary<string,byte[]> payload,string executable,string label,bool skipRuntimeBridge) {
             engineFile=executable;engineLabel=label;
-            Version = release.version; engineHash = release.engine_sha256; parsecHash = release.parsec_engine_sha256; Payload = payload; runtime = release.runtime_bridge;
-            foreach (var pair in release.companion_files) { expected.Add(pair.Key,pair.Value); Order.Add(pair.Key); }
+            Version = release.version; engineHash = release.engine_sha256; parsecHash = release.parsec_engine_sha256; Payload = payload; runtime = skipRuntimeBridge ? null : release.runtime_bridge;
+            string skippedRuntimeTarget = skipRuntimeBridge && release.runtime_bridge != null ? release.runtime_bridge.target : null;
+            foreach (var pair in release.companion_files) {
+                if (skippedRuntimeTarget != null && string.Equals(pair.Key,skippedRuntimeTarget,StringComparison.OrdinalIgnoreCase)) continue;
+                expected.Add(pair.Key,pair.Value); Order.Add(pair.Key);
+            }
             expected.Add("version.dll",release.dll_sha256); Order.Add("version.dll"); // Core commits last.
             if (runtime != null) {
                 if (!expected.ContainsKey(runtime.target) || runtime.target == "version.dll") throw new InvalidDataException("Invalid runtime bridge target.");
@@ -113,12 +122,15 @@ namespace UFC6OverlaySetup {
         static bool Linked(string path) { return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0; }
         public static string Normalize(string folder) {
             folder = Path.GetFullPath(folder.Trim().Trim('"'));
-            if (!Directory.Exists(folder)) throw new IOException("Choose PORTHEON\\games\\UFC6, its bin folder, or its novo folder.");
+            if (!Directory.Exists(folder)) throw new IOException("Choose PORTHEON\\games\\UFC6 (bin / novo) or a Clean Kyty folder (kyty_emulator.exe).");
             if (!File.Exists(Path.Combine(folder,"UFC 6.exe")) && File.Exists(Path.Combine(folder,"bin","UFC 6.exe"))) folder = Path.Combine(folder,"bin");
             else if (!File.Exists(Path.Combine(folder,"UFC 6.exe")) && !File.Exists(Path.Combine(folder,"UFC 6 novo.exe")) && File.Exists(Path.Combine(folder,"novo","UFC 6 novo.exe"))) folder = Path.Combine(folder,"novo");
             if (Linked(folder)) throw new IOException("Choose a real game folder, rather than a linked folder.");
-            if (!File.Exists(Path.Combine(folder,"UFC 6.exe")) && !File.Exists(Path.Combine(folder,"UFC 6 novo.exe"))) throw new IOException("UFC 6 engine was not found. Select PORTHEON\\games\\UFC6, bin, or novo. Your extracted game-data folder is different.");
+            if (!File.Exists(Path.Combine(folder,"UFC 6.exe")) && !File.Exists(Path.Combine(folder,"UFC 6 novo.exe")) && !File.Exists(Path.Combine(folder,"kyty_emulator.exe"))) throw new IOException("Game or Kyty engine was not found. Select PORTHEON\\games\\UFC6 (bin / novo) or a Clean Kyty folder with kyty_emulator.exe.");
             return folder;
+        }
+        static bool IsCleanKytyFolder(string folder) {
+            return File.Exists(Path.Combine(folder,"kyty_emulator.exe")) && !File.Exists(Path.Combine(folder,"UFC 6.exe")) && !File.Exists(Path.Combine(folder,"UFC 6 novo.exe"));
         }
         static bool HasOverlayMarkers(string folder) {
             return File.Exists(Path.Combine(folder,"ufc6-quit-menu.ini")) || File.Exists(Path.Combine(folder,"ufc6-quit-menu.log")) || File.Exists(Path.Combine(folder,"ufc6_pthread_original.dll"));
@@ -143,6 +155,7 @@ namespace UFC6OverlaySetup {
         }
         public Inspection Inspect(string folder) {
             folder = Normalize(folder);
+            if (KytyEngine != null && IsCleanKytyFolder(folder)) return KytyEngine.InspectCore(folder);
             if(NewEngine!=null && File.Exists(Path.Combine(folder,"UFC 6 novo.exe"))) {
                 Inspection newResult = NewEngine.InspectCore(folder);
                 PopulateSiblingState(this,newResult,folder,"bin");
@@ -156,7 +169,8 @@ namespace UFC6OverlaySetup {
             folder = Normalize(folder);
             if (Linked(Path.Combine(folder,engineFile))) throw new IOException("The game executable is a link. Nothing was changed.");
             string executable=Path.Combine(folder,engineFile);
-            var result = new Inspection { Folder = folder, Supported = File.Exists(executable) && (HashFile(executable) == engineHash || EngineCompatibility.Matches(executable,engineFile)), TotalFiles=Order.Count, EngineLabel=engineLabel };
+            bool isKyty = engineFile.Equals("kyty_emulator.exe",StringComparison.OrdinalIgnoreCase);
+            var result = new Inspection { Folder = folder, CleanKyty = isKyty, Supported = File.Exists(executable) && (isKyty || HashFile(executable) == engineHash || EngineCompatibility.Matches(executable,engineFile)), TotalFiles=Order.Count, EngineLabel=engineLabel };
             string parsec = Path.Combine(folder,"UFC 6 Parsec.exe");
             if (parsecHash != null && File.Exists(parsec)) result.ParsecStatus = !Linked(parsec) && (HashFile(parsec) == parsecHash || EngineCompatibility.Matches(parsec,"UFC 6 Parsec.exe")) ? "Verified Parsec / two-player engine is supported." : "Unrecognized Parsec engine: that mode will not load the overlay.";
             foreach (string name in Order) {
@@ -181,7 +195,7 @@ namespace UFC6OverlaySetup {
             foreach (var process in Process.GetProcesses()) using (process) {
                 string name;
                 try { name = process.ProcessName; } catch { continue; }
-                if (!string.Equals(name,"UFC 6",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"UFC 6 novo",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"UFC 6 Parsec",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"UFC6",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"ufc6_menu_restart",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"ufc6_menu_icons",StringComparison.OrdinalIgnoreCase)) continue;
+                if (!string.Equals(name,"UFC 6",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"UFC 6 novo",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"UFC 6 Parsec",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"UFC6",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"kyty_emulator",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"kyty_launcher",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"ufc6_menu_restart",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"ufc6_menu_icons",StringComparison.OrdinalIgnoreCase)) continue;
                 try {
                     string path = process.MainModule.FileName;
                     if (string.Equals(Path.GetDirectoryName(path),folder,StringComparison.OrdinalIgnoreCase) || string.Equals(path,Path.Combine(Directory.GetParent(folder).FullName,"UFC6.exe"),StringComparison.OrdinalIgnoreCase))
@@ -195,6 +209,7 @@ namespace UFC6OverlaySetup {
         }
         public string ApplyAll(string folder,bool remove,bool repair) {
             string primary = Normalize(folder);
+            if (KytyEngine != null && IsCleanKytyFolder(primary)) return KytyEngine.Apply(primary,remove,repair);
             if (NewEngine == null) return Apply(primary,remove,repair);
             bool isNovo = File.Exists(Path.Combine(primary,"UFC 6 novo.exe"));
             DirectoryInfo parent = Directory.GetParent(primary);
@@ -226,6 +241,7 @@ namespace UFC6OverlaySetup {
         }
         public string Apply(string folder,bool remove,bool repair) {
             folder=Normalize(folder);
+            if(KytyEngine!=null && IsCleanKytyFolder(folder)) return KytyEngine.Apply(folder,remove,repair);
             if(NewEngine!=null && File.Exists(Path.Combine(folder,"UFC 6 novo.exe"))) return NewEngine.Apply(folder,remove,repair);
             var state = Inspect(folder); folder = state.Folder;
             if (state.HardConflicts.Count != 0) throw new IOException("Linked or directory conflicts were found: " + string.Join(", ",state.HardConflicts) + ". Nothing was changed.");
@@ -283,13 +299,25 @@ namespace UFC6OverlaySetup {
             if (remove) foreach (string path in backups.Values) { try { File.Delete(path); } catch { /* The mod is removed; leave any locked backup in place. */ } }
             try {
                 string manifest = Path.Combine(folder,"ufc6_menu_layer.json");
-                using (var key = Microsoft.Win32.Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Khronos\Vulkan\ImplicitLayers",true)) {
-                    if (key != null) {
-                        if (remove) key.DeleteValue(manifest,false);
-                        else key.SetValue(manifest,0,Microsoft.Win32.RegistryValueKind.DWord);
+                bool hklmOk = false;
+                try {
+                    using (var key = Microsoft.Win32.Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Khronos\Vulkan\ImplicitLayers",true)) {
+                        if (key != null) {
+                            if (remove) key.DeleteValue(manifest,false);
+                            else key.SetValue(manifest,0,Microsoft.Win32.RegistryValueKind.DWord);
+                            hklmOk = true;
+                        }
+                    }
+                } catch { }
+                if (!hklmOk || remove) {
+                    using (var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(@"SOFTWARE\Khronos\Vulkan\ImplicitLayers",true)) {
+                        if (key != null) {
+                            if (remove) key.DeleteValue(manifest,false);
+                            else key.SetValue(manifest,0,Microsoft.Win32.RegistryValueKind.DWord);
+                        }
                     }
                 }
-            } catch { /* HKLM registration requires admin; version.dll also registers when the game runs elevated. */ }
+            } catch { /* Best-effort; version.dll also sets VK_ADD_IMPLICIT_LAYER_PATH and HKCU at runtime. */ }
             return remove ? "Overlay removed. Settings, screenshots, and upgrade backups were kept." : "Overlay v" + Version + " installed.\r\nLaunch UFC 6 normally, then hold LB + RB + Menu for about one second, or press F10.\r\n\r\nSettings and screenshots were kept. Recognized older files were backed up.";
         }
     }
@@ -298,7 +326,7 @@ namespace UFC6OverlaySetup {
         readonly TextBox folder = new TextBox();
         readonly TextBox status = new TextBox();
         readonly ModernButton support = new ModernButton();
-        readonly ModernButton browse = new ModernButton(), check = new ModernButton(), install = new ModernButton(), remove = new ModernButton(), updates = new ModernButton();
+        readonly ModernButton browse = new ModernButton(), check = new ModernButton(), parsectagon = new ModernButton(), discord = new ModernButton(), install = new ModernButton(), remove = new ModernButton(), updates = new ModernButton();
         bool busy;
         bool repairMode;
         public SetupForm(Manager manager) {
@@ -310,24 +338,28 @@ namespace UFC6OverlaySetup {
             var hint=ModernUi.Label("INSTALL  /  UPDATE  /  REMOVE",118,116,580,24,9,false,true);
             var version=ModernUi.Label("SETUP  v"+manager.Version,32,145,620,20,9,false,true);
             var pathCard=new ModernCard {Bounds=new Rectangle(32,178,696,182)};
-            pathCard.Controls.Add(ModernUi.Label("1   Choose PORTHEON's UFC6 folder",20,16,650,28,12,true));
-            pathCard.Controls.Add(ModernUi.Label("Select UFC6, bin, or novo. Setup checks both installed engines.",20,48,650,22,10,false,true));
+            pathCard.Controls.Add(ModernUi.Label("1   Choose PORTHEON UFC6 or Clean Kyty folder",20,16,650,28,12,true));
+            pathCard.Controls.Add(ModernUi.Label("Select PORTHEON's UFC6 (bin / novo) or a Clean Kyty folder (kyty_emulator.exe).",20,48,650,22,10,false,true));
             var input=new ModernCard {Bounds=new Rectangle(20,80,500,44)};
             folder.SetBounds(14,11,472,26);folder.BorderStyle=BorderStyle.None;folder.BackColor=ModernUi.Card;folder.ForeColor=ModernUi.Text;folder.Font=new Font("Segoe UI",11);input.Controls.Add(folder);
             browse.Text="Browse...";browse.SetBounds(536,80,140,44);
-            check.Text="Check folder";check.SetBounds(20,136,140,32);
+            check.Text="Check folder";check.SetBounds(20,136,130,32);
+            parsectagon.Text="Parsectagon.cc";parsectagon.SetBounds(160,136,140,32);
+            discord.Text="Discord";discord.SetBounds(310,136,110,32);
             updates.Text="Check for updates";updates.SetBounds(506,136,170,32);
-            pathCard.Controls.AddRange(new Control[]{input,browse,check,updates});
+            pathCard.Controls.AddRange(new Control[]{input,browse,check,parsectagon,discord,updates});
             var infoCard=new ModernCard {Bounds=new Rectangle(32,376,696,174)};
             infoCard.Controls.Add(ModernUi.Label("2   Check compatibility",20,16,650,27,12,true));
             status.SetBounds(20,52,656,104);ModernUi.Status(status);
-            status.Text="Choose the UFC6 folder inside PORTHEON's games folder.\r\nOne Install / Update action covers both bin and novo when present.\r\nClick Check folder to verify the installation location.";infoCard.Controls.Add(status);
+            status.Text="Choose PORTHEON's UFC6 folder (bin / novo) or a Clean Kyty folder (kyty_emulator.exe).\r\nPORTHEON mode covers both bin and novo when present; Clean Kyty keeps libwinpthread-1.dll intact.\r\nClick Check folder to verify the installation location.";infoCard.Controls.Add(status);
             support.Text="Export support report...";support.SetBounds(32,574,238,44);support.Enabled=false;
             support.Click+=delegate{try{using(var diagnostic=new DiagnosticsForm(manager.Version,Diagnostics.Folder(folder.Text))){diagnostic.ShowDialog(this);}}catch(Exception error){status.Text=error.Message;}};
             install.Text="Install / Update";install.SetBounds(288,574,214,44);install.Tone=ButtonTone.Primary;install.Enabled=false;
             remove.Text="Remove overlay";remove.SetBounds(518,574,210,44);remove.Tone=ButtonTone.Danger;remove.Enabled=false;
             var kept=ModernUi.Label("Settings, screenshots and save backups are kept.",32,631,696,22,9,false,true);
             Controls.AddRange(new Control[]{ModernUi.Logo(32,70,66),title,hint,version,pathCard,infoCard,support,install,remove,kept});
+            parsectagon.Click+=delegate{try{Process.Start(new ProcessStartInfo("https://parsectagon.cc"){UseShellExecute=true});}catch(Exception error){status.Text="Could not open Parsectagon: "+error.Message;}};
+            discord.Click+=delegate{try{Process.Start(new ProcessStartInfo("https://discord.gg/a84pBw2Ff"){UseShellExecute=true});}catch(Exception error){status.Text="Could not open Discord: "+error.Message;}};
             updates.Click+=delegate{using(var update=new UpdateForm(manager.Version,folder.Text)){update.ShowDialog(this);if(update.InstallerOpened)Close();}};
             AcceptButton=check;
             browse.Click+=delegate{try{string selected=FolderPicker.Select(Handle,folder.Text);if(selected!=null){folder.Text=selected;Run(null);}}catch(Exception error){status.Text="Could not open the folder picker: "+error.Message;}};
@@ -373,6 +405,9 @@ namespace UFC6OverlaySetup {
             var files = release.companion_files.Keys.Concat(new [] {"version.dll"}).ToDictionary(name => name,name => Resource(name));
             var manager=new Manager(release,files);
             if(release.new_engine!=null){var payload=release.new_engine.companion_files.Keys.Concat(new [] {"version.dll"}).ToDictionary(name=>name,name=>Resource(name));manager.NewEngine=new Manager(release.new_engine,payload,"UFC 6 novo.exe","PORTHEON PS5 Pro / DLSS");}
+            var kytyRel=release.new_engine??release;
+            var kytyFiles=kytyRel.companion_files.Keys.Concat(new [] {"version.dll"}).ToDictionary(name=>name,name=>Resource(name));
+            manager.KytyEngine=new Manager(kytyRel,kytyFiles,"kyty_emulator.exe","Clean Kyty",true);
             return manager;
         }
         [STAThread] public static int Main(string[] args) {

@@ -2,6 +2,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <string.h>
+#include <math.h>
 #include "live_cheats.h"
 #include "cheat_bindings.h"
 #include "exact_hooks.h"
@@ -23,9 +24,153 @@ static CheatBindingCache binding_cache[8];
 static volatile LONG binding_commands[2];
 typedef struct {volatile LONG busy,command,known,enabled;volatile LONG64 tick;} Observation;
 static Observation observations[2];
-static volatile LONG64 fight_presence_tick;
-static const unsigned char sync_signature[]={0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x55,0x41,0x54,0x53,0x48,0x83,0xec,0x18,0x48,0x8b,0x05,0x88,0xb5,0x9e,0x09,0x48,0x8b,0x00,0x48,0x89,0x45,0xd0};
+static volatile LONG64 fight_presence_tick,sparring_clock_obj,sparring_clock_value;
+static volatile LONG64 sparring_elapsed_obj,sparring_elapsed_value;
+static volatile LONG64 sparring_round_elapsed_obj,sparring_round_elapsed_value;
+static volatile LONG64 sparring_round_remaining_obj,sparring_round_remaining_value;
+static volatile LONG sparring_clock_paused,sparring_clock_scanning;
+static volatile LONG sparring_clock_saved_bits;
+static volatile LONG sparring_elapsed_saved_bits;
+static volatile LONG sparring_round_elapsed_saved,sparring_round_remaining_saved;
 static int read_memory(uintptr_t address,void *out,size_t size){SIZE_T got=0;return address>=0x10000&&ReadProcessMemory(GetCurrentProcess(),(void*)address,out,size,&got)&&got==size;}
+static int readable_page(DWORD protection){
+ DWORD page=protection&0xff;
+ return !(protection&(PAGE_GUARD|PAGE_NOACCESS))&&
+        (page==PAGE_READONLY||page==PAGE_READWRITE||page==PAGE_WRITECOPY||
+         page==PAGE_EXECUTE_READ||page==PAGE_EXECUTE_READWRITE||page==PAGE_EXECUTE_WRITECOPY);
+}
+static uintptr_t sparring_clock_find_named_near(uintptr_t anchor,const char *field_name,size_t field_name_length,uintptr_t *object_out){
+ static const uintptr_t field_vtable=0x909c227f0ULL;
+ unsigned char anchor_header[0x68];uintptr_t world=0;
+ if(!anchor||!read_memory(anchor,anchor_header,sizeof(anchor_header))||
+    memcmp(anchor_header,&field_vtable,8))return 0;
+ memcpy(&world,anchor_header+0x28,8);if(!world)return 0;
+ uintptr_t low=anchor>0x1000000?anchor-0x1000000:0x10000,high=anchor+0x1000000;
+ unsigned char *copy=(unsigned char*)HeapAlloc(GetProcessHeap(),0,1<<20);
+ if(!copy)return 0;
+ uintptr_t found=0,found_object=0;unsigned matches=0;
+ for(uintptr_t at=low;at<high;){
+  MEMORY_BASIC_INFORMATION region;if(!VirtualQuery((void*)at,&region,sizeof(region)))break;
+  uintptr_t end=(uintptr_t)region.BaseAddress+region.RegionSize;if(end<=at)break;
+  if(region.State==MEM_COMMIT&&readable_page(region.Protect))for(uintptr_t cursor=at;cursor<end&&cursor<high;){
+   SIZE_T size=(SIZE_T)((end-cursor)>(1<<20)?(1<<20):(end-cursor));
+   if(size>high-cursor)size=(SIZE_T)(high-cursor);
+   if(read_memory(cursor,copy,size))for(SIZE_T offset=0;offset+8<=size;offset+=8){
+    uintptr_t vt=0;memcpy(&vt,copy+offset,8);if(vt!=field_vtable)continue;
+    uintptr_t object=cursor+offset,name_address=0,object_world=0,buffer=0;unsigned char header[0x68],data[0x24];
+    uint32_t element_size=0;char name[48]={0};float current=0;
+    if(!read_memory(object,header,sizeof(header)))continue;
+    memcpy(&name_address,header+8,8);memcpy(&object_world,header+0x28,8);
+    memcpy(&element_size,header+0x58,4);memcpy(&buffer,header+0x60,8);
+    if(object_world!=world||element_size!=4||field_name_length>=sizeof(name)||
+       !read_memory(name_address,name,field_name_length)||memcmp(name,field_name,field_name_length)||
+       !read_memory(buffer,data,sizeof(data)))continue;
+    uint16_t data_offset=0;memcpy(&data_offset,data+0x1c,2);
+    if(data_offset!=32||!read_memory(buffer+data_offset,&current,4)||
+       !isfinite(current)||current<=0.f||current>600.f)continue;
+    found=buffer+data_offset;found_object=object;++matches;
+   }
+   cursor+=size;
+  }
+  at=end;
+ }
+ HeapFree(GetProcessHeap(),0,copy);
+ if(matches!=1)return 0;
+ if(object_out)*object_out=found_object;return found;
+}
+static uintptr_t sparring_clock_find_near(uintptr_t anchor,uintptr_t *object_out){
+ return sparring_clock_find_named_near(anchor,"Training_TimeRemaining",23,object_out);
+}
+static int sparring_clock_valid_named(uintptr_t obj,uintptr_t value,const char *field_name,size_t field_name_length){
+ static const uintptr_t field_vtable=0x909c227f0ULL;
+ unsigned char header[0x68],data[0x20];uintptr_t vt=0,name_address=0,buffer=0;char name[48]={0};uint32_t element_size=0;
+ if(!obj||!value||!read_memory(obj,header,sizeof(header)))return 0;
+ memcpy(&vt,header,8);memcpy(&name_address,header+8,8);memcpy(&element_size,header+0x58,4);memcpy(&buffer,header+0x60,8);
+ if(vt!=field_vtable||element_size!=4||field_name_length>=sizeof(name)||
+    !read_memory(name_address,name,field_name_length)||memcmp(name,field_name,field_name_length)||
+    !read_memory(buffer,data,sizeof(data)))return 0;
+ uint16_t offset=0;memcpy(&offset,data+0x1c,2);return offset==32&&buffer+offset==value;
+}
+static int sparring_clock_valid(uintptr_t obj,uintptr_t value){return sparring_clock_valid_named(obj,value,"Training_TimeRemaining",23);}
+static DWORD WINAPI sparring_clock_scan_worker(void *unused){
+ (void)unused;
+ uintptr_t anchor=0,object=0,value=0,elapsed_object=0,elapsed_value=0;
+ uintptr_t round_elapsed_object=0,round_elapsed_value=0,round_remaining_object=0,round_remaining_value=0;
+ if(read_memory(0x90b444c10ULL,&anchor,8)){
+  value=sparring_clock_find_near(anchor,&object);
+  elapsed_value=sparring_clock_find_named_near(anchor,"Timer_Training_Countdown_Elapsed",32,&elapsed_object);
+  round_elapsed_value=sparring_clock_find_named_near(anchor,"ROUND_TIME_ELAPSED",18,&round_elapsed_object);
+  round_remaining_value=sparring_clock_find_named_near(anchor,"ROUND_TIME_REMAINING",20,&round_remaining_object);
+ }
+ if(value){InterlockedExchange64(&sparring_clock_obj,(LONG64)object);InterlockedExchange64(&sparring_clock_value,(LONG64)value);}
+ if(elapsed_value){InterlockedExchange64(&sparring_elapsed_obj,(LONG64)elapsed_object);InterlockedExchange64(&sparring_elapsed_value,(LONG64)elapsed_value);}
+ if(round_elapsed_value){InterlockedExchange64(&sparring_round_elapsed_obj,(LONG64)round_elapsed_object);InterlockedExchange64(&sparring_round_elapsed_value,(LONG64)round_elapsed_value);}
+ if(round_remaining_value){InterlockedExchange64(&sparring_round_remaining_obj,(LONG64)round_remaining_object);InterlockedExchange64(&sparring_round_remaining_value,(LONG64)round_remaining_value);}
+ InterlockedExchange(&sparring_clock_scanning,0);
+ return 0;
+}
+static void sparring_clock_hold_value(uintptr_t value,volatile LONG *saved_bits,int increasing){
+ LONG current_bits=0;if(!read_memory(value,&current_bits,4))return;float cur=0;memcpy(&cur,&current_bits,4);
+ if(!isfinite(cur)||cur<0.f||cur>600.f)return;
+ LONG saved_value_bits=InterlockedCompareExchange(saved_bits,0,0);float saved=0;memcpy(&saved,&saved_value_bits,4);
+ if(saved_value_bits==0||(increasing?cur+5.f<saved:cur>saved+5.f))InterlockedExchange(saved_bits,current_bits);
+ else if(current_bits!=saved_value_bits)InterlockedExchange((volatile LONG*)value,saved_value_bits);
+}
+static void sparring_clock_hold_integer(uintptr_t value,volatile LONG *saved_value,int increasing){
+ LONG current=0;if(!read_memory(value,&current,4)||current<0||current>3600)return;
+ LONG saved=InterlockedCompareExchange(saved_value,-1,-1);
+ if(saved<0||(increasing?current+5<saved:current>saved+5))InterlockedExchange(saved_value,current);
+ else if(current!=saved)InterlockedExchange((volatile LONG*)value,saved);
+}
+static void sparring_clock_step(void){
+ if(!InterlockedCompareExchange(&sparring_clock_paused,0,0)){InterlockedExchange(&sparring_clock_saved_bits,0);InterlockedExchange(&sparring_elapsed_saved_bits,0);InterlockedExchange(&sparring_round_elapsed_saved,-1);InterlockedExchange(&sparring_round_remaining_saved,-1);return;}
+ uintptr_t obj=(uintptr_t)InterlockedCompareExchange64(&sparring_clock_obj,0,0);
+ uintptr_t value=(uintptr_t)InterlockedCompareExchange64(&sparring_clock_value,0,0);
+ uintptr_t elapsed_obj=(uintptr_t)InterlockedCompareExchange64(&sparring_elapsed_obj,0,0);
+ uintptr_t elapsed_value=(uintptr_t)InterlockedCompareExchange64(&sparring_elapsed_value,0,0);
+ uintptr_t round_elapsed_obj=(uintptr_t)InterlockedCompareExchange64(&sparring_round_elapsed_obj,0,0);
+ uintptr_t round_elapsed_value=(uintptr_t)InterlockedCompareExchange64(&sparring_round_elapsed_value,0,0);
+ uintptr_t round_remaining_obj=(uintptr_t)InterlockedCompareExchange64(&sparring_round_remaining_obj,0,0);
+ uintptr_t round_remaining_value=(uintptr_t)InterlockedCompareExchange64(&sparring_round_remaining_value,0,0);
+ int remaining_valid=sparring_clock_valid(obj,value);
+ int elapsed_valid=sparring_clock_valid_named(elapsed_obj,elapsed_value,"Timer_Training_Countdown_Elapsed",32);
+ int round_elapsed_valid=sparring_clock_valid_named(round_elapsed_obj,round_elapsed_value,"ROUND_TIME_ELAPSED",18);
+ int round_remaining_valid=sparring_clock_valid_named(round_remaining_obj,round_remaining_value,"ROUND_TIME_REMAINING",20);
+ if(!remaining_valid){
+  InterlockedExchange64(&sparring_clock_obj,0);InterlockedExchange64(&sparring_clock_value,0);InterlockedExchange(&sparring_clock_saved_bits,0);
+ }
+ if(!elapsed_valid){
+  InterlockedExchange64(&sparring_elapsed_obj,0);InterlockedExchange64(&sparring_elapsed_value,0);InterlockedExchange(&sparring_elapsed_saved_bits,0);
+ }
+ if(!round_elapsed_valid){
+  InterlockedExchange64(&sparring_round_elapsed_obj,0);InterlockedExchange64(&sparring_round_elapsed_value,0);InterlockedExchange(&sparring_round_elapsed_saved,-1);
+ }
+ if(!round_remaining_valid){
+  InterlockedExchange64(&sparring_round_remaining_obj,0);InterlockedExchange64(&sparring_round_remaining_value,0);InterlockedExchange(&sparring_round_remaining_saved,-1);
+ }
+ if(!remaining_valid||!elapsed_valid||!round_elapsed_valid||!round_remaining_valid){
+  if(InterlockedCompareExchange(&sparring_clock_scanning,1,0)==0){
+   HANDLE t=CreateThread(NULL,0,sparring_clock_scan_worker,NULL,0,NULL);
+   if(t)CloseHandle(t);else InterlockedExchange(&sparring_clock_scanning,0);
+  }
+ }
+ if(remaining_valid)sparring_clock_hold_value(value,&sparring_clock_saved_bits,0);
+ if(elapsed_valid)sparring_clock_hold_value(elapsed_value,&sparring_elapsed_saved_bits,1);
+ if(round_elapsed_valid)sparring_clock_hold_integer(round_elapsed_value,&sparring_round_elapsed_saved,1);
+ if(round_remaining_valid)sparring_clock_hold_integer(round_remaining_value,&sparring_round_remaining_saved,0);
+}
+void live_cheats_sparring_clock_toggle(void){
+ int next=!InterlockedCompareExchange(&sparring_clock_paused,0,0);
+ InterlockedExchange(&sparring_clock_saved_bits,0);
+ InterlockedExchange(&sparring_elapsed_saved_bits,0);
+ InterlockedExchange(&sparring_round_elapsed_saved,-1);
+ InterlockedExchange(&sparring_round_remaining_saved,-1);
+ InterlockedExchange(&sparring_clock_paused,next);
+ if(next)sparring_clock_step();
+}
+int live_cheats_sparring_clock_get(void){return (int)InterlockedCompareExchange(&sparring_clock_paused,0,0);}
+void live_cheats_sparring_clock_tick(void){sparring_clock_step();}
+static const unsigned char sync_signature[]={0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x55,0x41,0x54,0x53,0x48,0x83,0xec,0x18,0x48,0x8b,0x05,0x88,0xb5,0x9e,0x09,0x48,0x8b,0x00,0x48,0x89,0x45,0xd0};
 static void __attribute__((sysv_abi)) hooked_binding_sync(void *binder,unsigned first,unsigned count){
     unsigned commands[2];CheatBindingFrame frame;memset(&frame,0,sizeof(frame));frame.player_one=-1;
     for(int i=0;i<2;++i)commands[i]=(unsigned)InterlockedCompareExchange(&binding_commands[i],0,0);
@@ -102,7 +247,7 @@ int live_cheats_toggle(LiveCheats *s,int which){
     else{f->requested=1;f->owned_mask|=s->target;}
     live_cheats_tick(s);return 1;
 }
-void live_cheats_stop(LiveCheats *s){live_ko_poll(0);for(int i=0;i<2;++i)s->flags[i].requested=0;live_cheats_tick(s);}
+void live_cheats_stop(LiveCheats *s){InterlockedExchange(&sparring_clock_paused,0);InterlockedExchange(&sparring_clock_saved_bits,0);InterlockedExchange(&sparring_elapsed_saved_bits,0);InterlockedExchange(&sparring_round_elapsed_saved,-1);InterlockedExchange(&sparring_round_remaining_saved,-1);live_ko_poll(0);for(int i=0;i<2;++i)s->flags[i].requested=0;live_cheats_tick(s);}
 
 int live_cheats_fight_ready(void){
  uint64_t last=(uint64_t)InterlockedCompareExchange64(&fight_presence_tick,0,0);

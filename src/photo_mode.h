@@ -14,4 +14,9 @@ void photo_mode_poll(int focused,int menu_open,const PhotoInput *input);
 int photo_mode_blocks_input(void);
 int photo_mode_stop_pending(void);
 void photo_mode_snapshot(PhotoSnapshot *out);
+void photo_mode_fpv_set(int target);
+int photo_mode_fpv_get(void);
+void photo_mode_fpv_adjust(float pitch_deg,float height_offset_m,float fwd_offset_m,int fov_deg,float grapple_dist_m);
+void photo_mode_fpv_get_tune(float *pitch_deg,float *height_offset_m,float *fwd_offset_m,int *fov_deg,float *grapple_dist_m);
+int photo_mode_fpv_diag(void);
 #endif

@@ -20,7 +20,7 @@ if ($LASTEXITCODE) { throw 'Parsectagon brand data verification failed' }
 python src/generate_lobby_poster.py --check
 if ($LASTEXITCODE) { throw 'Parsectagon poster artwork verification failed' }
 $sources = @('src/quit_menu.c','src/lobby_bridge.c','src/fight_report_export.c','src/avatar_readback.c','src/version_proxy.c','src/exact_hooks.c','src/restart_client.c','src/gamebar_shortcut.c','src/gamebar_monitor.c','src/launch_config.c','src/launcher_dialog.c','src/screenshot_folder.c','src/live_cheats.c','src/cheat_bindings.c','src/career_cheats.c','src/game_icons.c','src/game_version.c','src/save_backups.c','src/overlay_preferences.c','src/startup_options.c','src/startup_prompts.c','src/progression_notice.c','src/instant_replay_gate.c','src/photo_mode.c','src/replay_controls.c','src/audio_focus.c','src/audio_session_mute.c','src/performance_settings.c')
-$flags = @('cc','-target','x86_64-windows-gnu','-O2','-Wall','-Wextra','-Werror','-shared','-Isrc','-luser32','-lgdi32','-lkernel32','-ladvapi32','-lcomdlg32','-lwinhttp','-lshell32','-lole32','-luuid')
+$flags = @('cc','-target','x86_64-windows-gnu','-O2','-Wall','-Wextra','-Werror','-shared','-DUFC6_ENGINE_COMPAT_SHARED','-Isrc','-luser32','-lgdi32','-lkernel32','-ladvapi32','-lcomdlg32','-lwinhttp','-lshell32','-lole32','-luuid')
 if ($NoLobby) { $flags += '-DUFC6_ENABLE_LOBBY=0' }
 if ($Test) { $flags += '-DQUIT_MENU_TEST'; $output = 'dist/quit_menu_test.dll' }
 else { $output = 'dist/version.dll' }

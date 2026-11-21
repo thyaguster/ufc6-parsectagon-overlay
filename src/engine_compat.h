@@ -1,5 +1,9 @@
 #ifndef UFC6_ENGINE_COMPAT_H
 #define UFC6_ENGINE_COMPAT_H
+#if defined(UFC6_ENGINE_COMPAT_SHARED) && !defined(UFC6_ENGINE_COMPAT_IMPL)
+int engine_fingerprint(void);
+uintptr_t engine_new_button_rva(void);
+#else
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <stdint.h>
@@ -61,6 +65,12 @@ static BOOL CALLBACK engine_identity_detect(PINIT_ONCE once,PVOID parameter,PVOI
     if(matches==1){engine_identity_profile=3;engine_identity_button_rva=found;}
     return TRUE;
 }
+#ifdef UFC6_ENGINE_COMPAT_IMPL
+int engine_fingerprint(void){InitOnceExecuteOnce(&engine_identity_once,engine_identity_detect,NULL,NULL);return engine_identity_profile;}
+uintptr_t engine_new_button_rva(void){InitOnceExecuteOnce(&engine_identity_once,engine_identity_detect,NULL,NULL);return engine_identity_button_rva;}
+#else
 static int engine_fingerprint(void){InitOnceExecuteOnce(&engine_identity_once,engine_identity_detect,NULL,NULL);return engine_identity_profile;}
 static inline uintptr_t engine_new_button_rva(void){InitOnceExecuteOnce(&engine_identity_once,engine_identity_detect,NULL,NULL);return engine_identity_button_rva;}
+#endif
+#endif
 #endif

@@ -48,6 +48,8 @@ static __declspec(noinline) void overlay_bootstrap(HMODULE module) {
     if(complete)SetEnvironmentVariableW(L"VK_LAYER_PATH",value);
     /* Keep the additive setting too, without changing inherited values. */
     if(n<16000&&(!n||!overlay_env_has(existing,directory))){lstrcpyW(value,directory);if(n){lstrcatW(value,L";");lstrcatW(value,existing);}SetEnvironmentVariableW(L"VK_ADD_LAYER_PATH",value);}
+    n=GetEnvironmentVariableW(L"VK_ADD_IMPLICIT_LAYER_PATH",existing,16000);
+    if(n<16000&&(!n||!overlay_env_has(existing,directory))){lstrcpyW(value,directory);if(n){lstrcatW(value,L";");lstrcatW(value,existing);}SetEnvironmentVariableW(L"VK_ADD_IMPLICIT_LAYER_PATH",value);}
     if(!GetEnvironmentVariableW(L"VK_LOADER_DEBUG",NULL,0))SetEnvironmentVariableW(L"VK_LOADER_DEBUG",L"error,warn");
     n=GetEnvironmentVariableW(L"VK_INSTANCE_LAYERS",existing,16000);
     if(n<16000&&(!n||!overlay_env_has(existing,L"VK_LAYER_UFC6_quit_menu"))){lstrcpyW(value,L"VK_LAYER_UFC6_quit_menu");if(n){lstrcatW(value,L";");lstrcatW(value,existing);}SetEnvironmentVariableW(L"VK_INSTANCE_LAYERS",value);}

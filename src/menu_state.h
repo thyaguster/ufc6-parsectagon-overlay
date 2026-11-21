@@ -27,7 +27,7 @@ enum { MENU_NONE, MENU_OPEN, MENU_RESUME, MENU_QUIT, MENU_CHANGED,
 enum { TOPBAR_FAVORITES, TOPBAR_ACTIONS, TOPBAR_LOBBY, TOPBAR_CHEATS, TOPBAR_PHOTO, TOPBAR_SETTINGS, TOPBAR_COUNT };
 
 enum { MENU_LOBBY_FILTER_CHANGED=MENU_LOBBY_REFRESH+1, MENU_FIGHT_EXPORT, MENU_GAME_ICONS_EDIT, MENU_LOBBY_LINK, MENU_LOBBY_UNLINK, MENU_STREAM_PRESET_APPLY, MENU_HOST_ROOM_PUBLISH };
-enum { MENU_REPLACE_ONLINE_CHANGED=MENU_HOST_ROOM_PUBLISH+1, MENU_FIGHT_REPORT_OPEN, MENU_FIGHT_REPORT_RETRY, MENU_FIGHT_REPORT_REFRESH, MENU_FAVORITES_CHANGED, MENU_FAVORITES_FIRST_CHANGED, MENU_OPEN_PARSECTAGON, MENU_OPEN_DISCORD, MENU_OPEN_GITHUB };
+enum { MENU_REPLACE_ONLINE_CHANGED=MENU_HOST_ROOM_PUBLISH+1, MENU_FIGHT_REPORT_OPEN, MENU_FIGHT_REPORT_RETRY, MENU_FIGHT_REPORT_REFRESH, MENU_FAVORITES_CHANGED, MENU_FAVORITES_FIRST_CHANGED, MENU_OPEN_PARSECTAGON, MENU_OPEN_DISCORD, MENU_OPEN_GITHUB, MENU_FPV_CAMERA_CHANGED, MENU_FPV_TUNE_CHANGED, MENU_SPARRING_CLOCK };
 
 typedef struct {
     int visible,selection,armed,chord_latched,draining;
@@ -54,7 +54,7 @@ typedef struct {
     int first_player_only;
     int career_amount_index[2],career_kind,game_icons_style,game_icons_from_overlay_change,game_icons_return_page,game_icons_return_selection,training_multiplier_index,startup_patch_enable;
     int binding_action,key_capturing,capture_target,theme_selection,font_index,box_style,window_size,settings_legacy,layout_style,backdrop_style,master_preset,topbar_tab;uint32_t assigned_chord;
-    int favorites[MENU_MAX_FAVORITES],favorite_count,open_favorites_first,fav_search_category,fav_search_mode,fav_carousel_index;
+    int favorites[MENU_MAX_FAVORITES],favorite_count,open_favorites_first,fav_search_category,fav_search_mode,fav_carousel_index,fpv_mode,fpv_pitch_deg,fpv_height_offset_cm,fpv_fwd_offset_cm,fpv_fov_deg,fpv_grapple_cm;
     char fav_search_query[32];
 } MenuState;
 
@@ -91,15 +91,15 @@ static int menu_modern_welcome_page(const MenuState *s){return s->layout_style!=
 static int menu_setting_id(int page,int row){
     static const int appearance[]={SETTING_MASTER_PRESET,SETTING_LAYOUT_STYLE,SETTING_BACKDROP_STYLE,SETTING_THEME,SETTING_SCALE,SETTING_FONT,SETTING_BOX_STYLE,SETTING_WINDOW_SIZE,SETTING_ICONS,SETTING_FAVORITES_FIRST,SETTING_BACK};
     static const int controls[]={SETTING_KEYBINDS,SETTING_GUIDE,SETTING_GAMEBAR,SETTING_ACCESS,SETTING_BACK};
-    static const int game[]={SETTING_LAUNCHER,SETTING_AUTO_LAUNCH,SETTING_GAME_ICONS,SETTING_SKIP_SPLASHES,SETTING_SUPPRESS_ONLINE_NOTICES,SETTING_STARTUP_PATCH,SETTING_EXPERIMENTAL,SETTING_AUDIO_FOCUS,SETTING_DECISION_REPLAY,SETTING_REPLACE_ONLINE,SETTING_BACK};
+    static const int game[]={SETTING_LAUNCHER,SETTING_AUTO_LAUNCH,SETTING_GAME_ICONS,SETTING_SKIP_SPLASHES,SETTING_SUPPRESS_ONLINE_NOTICES,SETTING_STARTUP_PATCH,SETTING_EXPERIMENTAL,SETTING_AUDIO_FOCUS,SETTING_DECISION_REPLAY,SETTING_INSTANT_REPLAY,SETTING_REPLACE_ONLINE,SETTING_BACK};
     static const int tools[]={SETTING_SCREENSHOTS,SETTING_SCREENSHOT_UI,SETTING_UPDATE,SETTING_DIAGNOSTICS,SETTING_LINK_PARSECTAGON,SETTING_LINK_DISCORD,SETTING_LINK_GITHUB,SETTING_RESET,SETTING_BACK};
-    static const int experimental[]={SETTING_STARTUP_POPUPS,SETTING_INSTANT_REPLAY,SETTING_AVATAR_REPAIR,SETTING_AVATAR_ALWAYS,SETTING_BACK};
+    static const int experimental[]={SETTING_STARTUP_POPUPS,SETTING_AVATAR_REPAIR,SETTING_AVATAR_ALWAYS,SETTING_BACK};
     return page==PAGE_APPEARANCE?appearance[row]:page==PAGE_CONTROLS?controls[row]:page==PAGE_GAME_SETTINGS?game[row]:page==PAGE_TOOLS?tools[row]:page==PAGE_EXPERIMENTAL?experimental[row]:row;
 }
 static void menu_return_setting(MenuState *s,int id){
     s->page=PAGE_SETTINGS;s->selection=id;s->armed=0;if(s->settings_legacy)return;
-    if(id==SETTING_STARTUP_POPUPS||id==SETTING_INSTANT_REPLAY||id==SETTING_AVATAR_REPAIR||id==SETTING_AVATAR_ALWAYS){s->page=PAGE_EXPERIMENTAL;s->selection=id==SETTING_STARTUP_POPUPS?0:id==SETTING_INSTANT_REPLAY?1:id==SETTING_AVATAR_REPAIR?2:3;return;}
-    const int pages[]={PAGE_APPEARANCE,PAGE_CONTROLS,PAGE_GAME_SETTINGS,PAGE_TOOLS},counts[]={10,4,10,8};
+    if(id==SETTING_STARTUP_POPUPS||id==SETTING_AVATAR_REPAIR||id==SETTING_AVATAR_ALWAYS){s->page=PAGE_EXPERIMENTAL;s->selection=id==SETTING_STARTUP_POPUPS?0:id==SETTING_AVATAR_REPAIR?1:2;return;}
+    const int pages[]={PAGE_APPEARANCE,PAGE_CONTROLS,PAGE_GAME_SETTINGS,PAGE_TOOLS},counts[]={10,4,11,8};
     for(int p=0;p<4;++p)for(int i=0;i<counts[p];++i)if(menu_setting_id(pages[p],i)==id){s->page=pages[p];s->selection=i;return;}
     s->page=PAGE_SETTINGS_HOME;s->selection=0;
 }
@@ -116,12 +116,13 @@ static int topbar_tab_rows(int tab){
         case TOPBAR_ACTIONS: return 5;
         case TOPBAR_LOBBY: return 4;
         case TOPBAR_CHEATS: return 5;
-        case TOPBAR_PHOTO: return 4;
+        case TOPBAR_PHOTO: return 5;
         case TOPBAR_SETTINGS: return 4;
         default: return 4;
     }
 }
 static int topbar_tab_rows_for(const MenuState *s){
+    if(s->topbar_tab==TOPBAR_PHOTO)return s->fpv_mode?10:5;
     return s->topbar_tab==TOPBAR_FAVORITES?(s->favorite_count+1):topbar_tab_rows(s->topbar_tab);
 }
 static void apply_master_preset(MenuState *s,int preset){
@@ -201,7 +202,7 @@ static int menu_scroll_page(int page){return page==PAGE_LOBBY||page==PAGE_STARTU
 static int menu_rows(const MenuState *s) {
     if(s->page==PAGE_MAIN&&s->layout_style!=LAYOUT_CLASSIC)return topbar_tab_rows_for(s);
     if(s->page==PAGE_FAVORITE_SEARCH){int ids[FAV_CATALOG_COUNT];return 3+fav_filter_items(s->fav_search_category,s->fav_search_query,ids,FAV_CATALOG_COUNT);}
-    return s->page==PAGE_FIGHT_REPORT?4:s->page==PAGE_LOBBY_HOME?8:s->page==PAGE_STREAM_PRESETS?5:s->page==PAGE_HOST_FIGHT?7:s->page==PAGE_LOBBY?8+s->lobby_room_count:s->page==PAGE_LOBBY_ACCOUNT?3:s->page==PAGE_WELCOME?1:s->page==PAGE_STARTUP?3:s->page==PAGE_STARTUP_CONFIRM||s->page==PAGE_AVATAR_REPAIR||s->page==PAGE_AVATAR_ALWAYS?2:s->page==PAGE_PERFORMANCE?PERF_ROWS:s->page==PAGE_PERFORMANCE_RESTART||s->page==PAGE_PERFORMANCE_DISCARD?2:s->page==PAGE_PHOTO_EFFECTS?FX_ROWS:s->page==PAGE_PHOTO_WATERMARK?MARK_ROWS:s->page==PAGE_PHOTO?12:s->page==PAGE_PHOTO_CONTROLS?12:s->page==PAGE_SETTINGS_HOME?7:s->page==PAGE_APPEARANCE?11:s->page==PAGE_CONTROLS?5:s->page==PAGE_GAME_SETTINGS?11:s->page==PAGE_TOOLS?9:s->page==PAGE_EXPERIMENTAL?5:s->page==PAGE_KEYBINDS?(BIND_COUNT+1):s->page==PAGE_BINDING?5:s->page==PAGE_THEME?7:s->page==PAGE_MAIN?MAIN_COUNT:s->page==PAGE_SETTINGS?SETTING_COUNT:s->page==PAGE_CHEATS?12:s->page==PAGE_BACKUPS?3:s->page==PAGE_GAME_ICONS?5:s->shutdown_countdown?1:2;
+    return s->page==PAGE_FIGHT_REPORT?4:s->page==PAGE_LOBBY_HOME?8:s->page==PAGE_STREAM_PRESETS?5:s->page==PAGE_HOST_FIGHT?7:s->page==PAGE_LOBBY?8+s->lobby_room_count:s->page==PAGE_LOBBY_ACCOUNT?3:s->page==PAGE_WELCOME?1:s->page==PAGE_STARTUP?3:s->page==PAGE_STARTUP_CONFIRM||s->page==PAGE_AVATAR_REPAIR||s->page==PAGE_AVATAR_ALWAYS?2:s->page==PAGE_PERFORMANCE?PERF_ROWS:s->page==PAGE_PERFORMANCE_RESTART||s->page==PAGE_PERFORMANCE_DISCARD?2:s->page==PAGE_PHOTO_EFFECTS?FX_ROWS:s->page==PAGE_PHOTO_WATERMARK?MARK_ROWS:s->page==PAGE_PHOTO?12:s->page==PAGE_PHOTO_CONTROLS?12:s->page==PAGE_SETTINGS_HOME?7:s->page==PAGE_APPEARANCE?11:s->page==PAGE_CONTROLS?5:s->page==PAGE_GAME_SETTINGS?12:s->page==PAGE_TOOLS?9:s->page==PAGE_EXPERIMENTAL?4:s->page==PAGE_KEYBINDS?(BIND_COUNT+1):s->page==PAGE_BINDING?5:s->page==PAGE_THEME?7:s->page==PAGE_MAIN?MAIN_COUNT:s->page==PAGE_SETTINGS?SETTING_COUNT:s->page==PAGE_CHEATS?12:s->page==PAGE_BACKUPS?3:s->page==PAGE_GAME_ICONS?5:s->shutdown_countdown?1:2;
 }
 static int lobby_grid_columns(const MenuState *s){return s->online_takeover&&s->lobby_columns>=3?s->lobby_columns:2;}
 static int lobby_columns_for_viewport(uint32_t width){return width>=2200?4:width>=1700?3:2;}
@@ -344,6 +345,7 @@ static int menu_execute_favorite_item(MenuState *s,int id){
         case FAV_PHOTO_FREEZE: return MENU_PHOTO_FREEZE;
         case FAV_PHOTO_FX: s->page=PAGE_PHOTO_EFFECTS;s->selection=0;return MENU_CHANGED;
         case FAV_PHOTO_WATERMARK: s->page=PAGE_PHOTO_WATERMARK;s->selection=0;return MENU_CHANGED;
+        case FAV_FPV_CAMERA: s->fpv_mode=(s->fpv_mode+1)%3;return MENU_FPV_CAMERA_CHANGED;
         case FAV_APPEARANCE: s->page=PAGE_APPEARANCE;s->selection=0;return MENU_CHANGED;
         case FAV_CONTROLS: s->page=PAGE_CONTROLS;s->selection=0;return MENU_CHANGED;
         case FAV_GAME_SETTINGS: s->page=PAGE_GAME_SETTINGS;s->selection=0;return MENU_CHANGED;
@@ -360,8 +362,8 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
     if(button==PAD_B) {
         if(s->page==PAGE_WELCOME){s->page=PAGE_MAIN;s->selection=MAIN_RESUME;s->armed=0;return MENU_WELCOME_DONE;}
         if(s->page==PAGE_STARTUP_CONFIRM){s->page=PAGE_STARTUP;s->selection=s->startup_patch_enable?0:1;s->armed=0;return MENU_CHANGED;}
-        if(s->page==PAGE_AVATAR_REPAIR){s->page=PAGE_EXPERIMENTAL;s->selection=2;s->armed=0;return MENU_CHANGED;}
-        if(s->page==PAGE_AVATAR_ALWAYS){s->page=PAGE_EXPERIMENTAL;s->selection=3;s->armed=0;return MENU_CHANGED;}
+        if(s->page==PAGE_AVATAR_REPAIR){s->page=PAGE_EXPERIMENTAL;s->selection=1;s->armed=0;return MENU_CHANGED;}
+        if(s->page==PAGE_AVATAR_ALWAYS){s->page=PAGE_EXPERIMENTAL;s->selection=2;s->armed=0;return MENU_CHANGED;}
         if(s->page==PAGE_STARTUP){menu_return_setting(s,SETTING_STARTUP_PATCH);return MENU_CHANGED;}
         if(s->page==PAGE_EXPERIMENTAL){s->page=PAGE_GAME_SETTINGS;s->selection=6;s->armed=0;return MENU_CHANGED;}
         if(s->page==PAGE_PERFORMANCE_RESTART||s->page==PAGE_PERFORMANCE_DISCARD){int page=s->page;s->page=PAGE_PERFORMANCE;s->selection=page==PAGE_PERFORMANCE_RESTART?PERF_RESTART:PERF_BACK;s->armed=0;return MENU_CHANGED;}
@@ -523,6 +525,39 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
                 int p=next_visible_preset(s->master_preset,button==PAD_LEFT);
                 apply_master_preset(s,p);return MENU_MASTER_PRESET_CHANGED;
             }
+            if(s->topbar_tab==TOPBAR_PHOTO&&s->selection==4){
+                s->fpv_mode=(s->fpv_mode+(button==PAD_LEFT?2:1))%3;
+                return MENU_FPV_CAMERA_CHANGED;
+            }
+            if(s->topbar_tab==TOPBAR_PHOTO&&s->selection==5){
+                s->fpv_pitch_deg+=dir*5;
+                if(s->fpv_pitch_deg<-45)s->fpv_pitch_deg=-45;
+                if(s->fpv_pitch_deg>45)s->fpv_pitch_deg=45;
+                return MENU_FPV_TUNE_CHANGED;
+            }
+            if(s->topbar_tab==TOPBAR_PHOTO&&s->selection==6){
+                s->fpv_height_offset_cm+=dir*5;
+                if(s->fpv_height_offset_cm<-40)s->fpv_height_offset_cm=-40;
+                if(s->fpv_height_offset_cm>40)s->fpv_height_offset_cm=40;
+                return MENU_FPV_TUNE_CHANGED;
+            }
+            if(s->topbar_tab==TOPBAR_PHOTO&&s->selection==7){
+                s->fpv_fwd_offset_cm+=dir*5;
+                if(s->fpv_fwd_offset_cm<-20)s->fpv_fwd_offset_cm=-20;
+                if(s->fpv_fwd_offset_cm>60)s->fpv_fwd_offset_cm=60;
+                return MENU_FPV_TUNE_CHANGED;
+            }
+            if(s->topbar_tab==TOPBAR_PHOTO&&s->selection==8){
+                int v=(s->fpv_fov_deg>=60&&s->fpv_fov_deg<=110)?s->fpv_fov_deg:90;
+                v+=dir*5;if(v<60)v=60;if(v>110)v=110;s->fpv_fov_deg=v;
+                return MENU_FPV_TUNE_CHANGED;
+            }
+            if(s->topbar_tab==TOPBAR_PHOTO&&s->selection==9){
+                int g=(s->fpv_grapple_cm<0)?0:(s->fpv_grapple_cm==0?65:s->fpv_grapple_cm);
+                g+=dir*5;if(g<45)g=-1;else if(g>100)g=100;
+                s->fpv_grapple_cm=g;
+                return MENU_FPV_TUNE_CHANGED;
+            }
             s->topbar_tab=topbar_next_tab(s->topbar_tab,dir);
             s->selection=0;
             return MENU_CHANGED;
@@ -625,12 +660,12 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
     }
     if(s->page==PAGE_AVATAR_REPAIR){
         if(button!=PAD_A)return MENU_NONE;
-        if(s->selection==1){s->page=PAGE_EXPERIMENTAL;s->selection=2;s->armed=0;return MENU_CHANGED;}
+        if(s->selection==1){s->page=PAGE_EXPERIMENTAL;s->selection=1;s->armed=0;return MENU_CHANGED;}
         s->armed=0;return s->avatar_mode==1?MENU_AVATAR_REPAIR_FINISH:s->avatar_mode==0?MENU_AVATAR_REPAIR_START:MENU_CHANGED;
     }
     if(s->page==PAGE_AVATAR_ALWAYS){
         if(button!=PAD_A)return MENU_NONE;
-        if(s->selection==0){s->page=PAGE_EXPERIMENTAL;s->selection=3;s->armed=0;return MENU_CHANGED;}
+        if(s->selection==0){s->page=PAGE_EXPERIMENTAL;s->selection=2;s->armed=0;return MENU_CHANGED;}
         s->armed=0;return MENU_AVATAR_ALWAYS_CHANGED;
     }
     if(s->page==PAGE_GAME_ICONS){
@@ -846,6 +881,12 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
                 if(s->selection==1)return MENU_PHOTO_FREEZE;
                 if(s->selection==2){s->page=PAGE_PHOTO_EFFECTS;s->selection=0;s->armed=0;return MENU_CHANGED;}
                 if(s->selection==3){s->page=PAGE_PHOTO_WATERMARK;s->selection=0;s->armed=0;return MENU_CHANGED;}
+                if(s->selection==4){s->fpv_mode=(s->fpv_mode+1)%3;s->armed=0;return MENU_FPV_CAMERA_CHANGED;}
+                if(s->selection==5){s->fpv_pitch_deg=(s->fpv_pitch_deg>=45)?-45:(s->fpv_pitch_deg+5);s->armed=0;return MENU_FPV_TUNE_CHANGED;}
+                if(s->selection==6){s->fpv_height_offset_cm=(s->fpv_height_offset_cm>=40)?-40:(s->fpv_height_offset_cm+5);s->armed=0;return MENU_FPV_TUNE_CHANGED;}
+                if(s->selection==7){s->fpv_fwd_offset_cm=(s->fpv_fwd_offset_cm>=60)?-20:(s->fpv_fwd_offset_cm+5);s->armed=0;return MENU_FPV_TUNE_CHANGED;}
+                if(s->selection==8){int v=(s->fpv_fov_deg>=60&&s->fpv_fov_deg<=110)?s->fpv_fov_deg:90;s->fpv_fov_deg=(v>=110)?60:(v+5);s->armed=0;return MENU_FPV_TUNE_CHANGED;}
+                if(s->selection==9){int g=(s->fpv_grapple_cm<0)?45:(s->fpv_grapple_cm==0?65:s->fpv_grapple_cm);s->fpv_grapple_cm=(g>=100)?-1:(g+5);s->armed=0;return MENU_FPV_TUNE_CHANGED;}
                 break;
             case TOPBAR_SETTINGS:
                 if(s->selection==0){

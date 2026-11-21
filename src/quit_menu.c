@@ -16,6 +16,7 @@
 #include "menu_state.h"
 #include "lobby_bridge.h"
 #include "fight_report_export.h"
+#include "overlay_widget.h"
 #include "restart_client.h"
 #include "avatar_readback.h"
 #include "xinput_menu.h"
@@ -54,7 +55,10 @@ static unsigned long progression_notice_last_calls;
 static int progression_notice_last_state;
 static const char *progression_notice_last_error;
 #ifndef QUIT_MENU_TEST
+#define UFC6_ENGINE_COMPAT_IMPL
 #include "engine_fingerprint.h"
+#else
+int engine_fingerprint(void){return 0;}
 #endif
 
 #define WM_MENU_ACTION (WM_APP + 40)
@@ -251,7 +255,7 @@ static DWORD WINAPI fight_report_worker(void *unused){
             DWORD state=(DWORD)GetPrivateProfileIntW(L"FightReport",L"State",0,report);
             if(waited==WAIT_OBJECT_0&&state==2){
                 fight_report_ok=1;
-                lstrcpyW(fight_report_message,L"Complete report saved in Documents\\UFC 6 Parsectagon Overlay\\Fight Reports.");
+                lstrcpyW(fight_report_message,L"Complete report saved in Documents\\UFC Parsectagon Overlay\\UFC6\\Fight Reports.");
             }else{
                 GetPrivateProfileStringW(L"FightReport",L"Message",L"Complete report could not be captured.",
                                          fight_report_message,120,report);
@@ -288,7 +292,7 @@ static void refresh_live_cheats(void){
 #endif
     live_cheats_tick(&live_cheats);
     ReplaySnapshot ko_replay;replay_snapshot(&ko_replay);
-    int previous_ko=ko_status;ko_status=live_ko_poll(foreground()&&!IsIconic(game_window)&&!menu.photo_active&&!ko_replay.available);
+    int previous_ko=ko_status;ko_status=live_ko_poll(foreground()&&!IsIconic(game_window)&&!menu.photo_active&&!ko_replay.available&&fight_report_match_state()!=3);
     if(previous_ko==1&&ko_status!=1)status(ko_status==2?L"Knockout triggered. Next hit KO disarmed.":L"Next hit KO cancelled or expired.");
     CareerSnapshot before=career;career_cheats_tick();career_cheats_snapshot(&career);
     CareerDiagnostics diagnostic;career_cheats_diagnostics(&diagnostic);
@@ -752,16 +756,10 @@ static void save_binding(int id,int keyboard,uint32_t value){
     if(ok){save_settings();status(L"Keybind saved.");}else status(L"Not saved: reserved, overlapping or invalid shortcut.");
 }
 static void rounded_box(HDC dc,RECT box,int radius,COLORREF fill,COLORREF edge){
-    HBRUSH brush=CreateSolidBrush(fill);HPEN pen=CreatePen(PS_SOLID,1,edge);
-    HGDIOBJ old_brush=SelectObject(dc,brush),old_pen=SelectObject(dc,pen);
-    RoundRect(dc,box.left,box.top,box.right,box.bottom,radius,radius);
-    SelectObject(dc,old_pen);SelectObject(dc,old_brush);DeleteObject(pen);DeleteObject(brush);
+    overlay_rounded_box(dc,box,radius,fill,edge);
 }
 static void row_surface(HDC dc,RECT box,int style,int radius,COLORREF fill,COLORREF edge){
-    if(style!=4){rounded_box(dc,box,radius,fill,edge);return;}
-    int cut=(box.bottom-box.top)/3;if(cut>9)cut=9;
-    POINT points[]={{box.left+cut,box.top},{box.right-cut-1,box.top},{box.right-1,box.top+cut},{box.right-1,box.bottom-cut-1},{box.right-cut-1,box.bottom-1},{box.left+cut,box.bottom-1},{box.left,box.bottom-cut-1},{box.left,box.top+cut}};
-    HPEN pen=CreatePen(PS_SOLID,1,edge);HBRUSH brush=CreateSolidBrush(fill);HGDIOBJ old_pen=SelectObject(dc,pen),old_brush=SelectObject(dc,brush);Polygon(dc,points,8);SelectObject(dc,old_pen);SelectObject(dc,old_brush);DeleteObject(pen);DeleteObject(brush);
+    overlay_row_surface(dc,box,style,radius,fill,edge);
 }
 static void arrow_mark(HDC dc,int x,int y,int direction,COLORREF color){
     HPEN pen=CreatePen(PS_SOLID,1,color);HGDIOBJ old=SelectObject(dc,pen);
@@ -1556,6 +1554,9 @@ static void draw_favorite_tab_row(HDC dc, RECT label_rect, RECT control_rect, in
         value_chip(dc, control_rect, L"Save PNG", focused, 0);
     } else if (it->id == FAV_FIGHT_REPORT) {
         value_chip(dc, control_rect, L"View", focused, 0);
+    } else if (it->id == FAV_FPV_CAMERA) {
+        static const wchar_t *fpv_names[] = { L"Off", L"Fighter 1", L"Fighter 2" };
+        value_chip(dc, control_rect, fpv_names[state->fpv_mode % 3], focused, 1);
     } else if (it->id == FAV_RESTART || it->id == FAV_QUIT) {
         value_chip(dc, control_rect, L"Confirm", focused, 0);
     } else {
@@ -1565,6 +1566,8 @@ static void draw_favorite_tab_row(HDC dc, RECT label_rect, RECT control_rect, in
 static void draw_modern_tab_rows(HDC dc, RECT panel, int start_y, int item_h, int gap, const MenuState *state, const OverlayPreferences *bindings, const OverlayTheme *theme, const int *cheat_states, const int *cheat_enabled, int ko_state) {
     int style = bindings->box_style;
     int item_count = topbar_tab_rows_for(state);
+    if (item_count > 8) { item_h = 28; gap = 4; }
+    else if (item_count > 6) { item_h = 34; gap = 5; }
     int ctrl_w = (panel.right - panel.left) < 460 ? 132 : 156;
     for (int i = 0; i < item_count; ++i) {
         int y = start_y + i * (item_h + gap);
@@ -1606,12 +1609,22 @@ static void draw_modern_tab_rows(HDC dc, RECT panel, int start_y, int item_h, in
             else if (i == 2) toggle_switch(dc, control_rect, ko_state == 1, focused);
             else value_chip(dc, control_rect, L"Open", focused, 0);
         } else if (state->topbar_tab == TOPBAR_PHOTO) {
-            const wchar_t *pht_items[] = { L"Enter Freecam Photo Mode", L"Freeze Fight Action", L"Visual Effects & Filters...", L"Custom Watermark & Brand..." };
+            const wchar_t *pht_items[] = { L"Enter Freecam Photo Mode", L"Freeze Fight Action", L"Visual Effects & Filters...", L"Custom Watermark & Brand...", L"FPV / POV Camera (Beta)", L"FPV Pitch Angle", L"FPV Eye Height", L"FPV Forward / Back", L"FPV Field of View", L"FPV Grapple Auto-Exit" };
+            static const wchar_t *fpv_names[] = { L"Off", L"Fighter 1", L"Fighter 2" };
+            wchar_t tune_buf[32];
+            int fov_v = (state->fpv_fov_deg >= 60 && state->fpv_fov_deg <= 110) ? state->fpv_fov_deg : 90;
+            int grp_v = (state->fpv_grapple_cm < 0) ? 0 : (state->fpv_grapple_cm == 0 ? 65 : state->fpv_grapple_cm);
             text(dc, font_main, pht_items[i], label_rect, focused ? RGB(255, 255, 255) : theme->text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
             if (i == 0) toggle_switch(dc, control_rect, state->photo_active, focused);
             else if (i == 1) toggle_switch(dc, control_rect, state->photo_frozen, focused);
             else if (i == 2) value_chip(dc, control_rect, L"10 FX Sliders", focused, 0);
-            else value_chip(dc, control_rect, L"PORTHEON ID", focused, 0);
+            else if (i == 3) value_chip(dc, control_rect, L"PORTHEON ID", focused, 0);
+            else if (i == 4) value_chip(dc, control_rect, fpv_names[state->fpv_mode % 3], focused, 1);
+            else if (i == 5) { swprintf(tune_buf, 32, L"%+d\x00B0", state->fpv_pitch_deg); value_chip(dc, control_rect, tune_buf, focused, 1); }
+            else if (i == 6) { swprintf(tune_buf, 32, L"%.2f m", 1.58f + state->fpv_height_offset_cm * 0.01f); value_chip(dc, control_rect, tune_buf, focused, 1); }
+            else if (i == 7) { swprintf(tune_buf, 32, L"%+.2f m", 0.24f + state->fpv_fwd_offset_cm * 0.01f); value_chip(dc, control_rect, tune_buf, focused, 1); }
+            else if (i == 8) { swprintf(tune_buf, 32, L"%d\x00B0", fov_v); value_chip(dc, control_rect, tune_buf, focused, 1); }
+            else { if (grp_v == 0) value_chip(dc, control_rect, L"Off", focused, 1); else { swprintf(tune_buf, 32, L"%.2f m", grp_v * 0.01f); value_chip(dc, control_rect, tune_buf, focused, 1); } }
         } else if (state->topbar_tab == TOPBAR_SETTINGS) {
             const wchar_t *sett_items[] = { L"Master preset", L"Appearance & theme...", L"Controls & keybinds...", L"All settings..." };
             text(dc, font_main, sett_items[i], label_rect, focused ? RGB(255, 255, 255) : theme->text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
@@ -1938,9 +1951,10 @@ static void draw_topbar_menu(HDC dc, RECT r, const MenuState *state, const Overl
     int flyout_left = (r.right - flyout_w) / 2;
     int flyout_right = flyout_left + flyout_w;
     int item_count = topbar_tab_rows_for(state);
-    int item_h = 42;
+    int item_h = item_count > 8 ? 28 : (item_count > 6 ? 34 : 42);
+    int row_gap = item_count > 8 ? 4 : (item_count > 6 ? 5 : 8);
     int header_h = 40;
-    int flyout_h = header_h + item_count * (item_h + 8) + 18;
+    int flyout_h = header_h + item_count * (item_h + row_gap) + 14;
     RECT flyout = { flyout_left, 74, flyout_right, 74 + flyout_h };
     row_surface(dc, flyout, style, style == 3 ? 20 : 10, theme->surface, theme->border);
 
@@ -1959,7 +1973,7 @@ static void draw_topbar_menu(HDC dc, RECT r, const MenuState *state, const Overl
 
     int start_y = flyout.top + header_h;
     for (int i = 0; i < item_count; ++i) {
-        int y = start_y + i * (item_h + 8);
+        int y = start_y + i * (item_h + row_gap);
         RECT row_rect = { flyout.left + 16, y, flyout.right - 16, y + item_h };
         int focused = (i == state->selection);
         COLORREF fill = focused ? theme->focus : RGB(14, 18, 25);
@@ -2000,12 +2014,22 @@ static void draw_topbar_menu(HDC dc, RECT r, const MenuState *state, const Overl
             else if (i == 3) value_chip(dc, control_rect, L"Open", focused, 0);
             else if (i == 4) value_chip(dc, control_rect, L"Open", focused, 0);
         } else if (state->topbar_tab == TOPBAR_PHOTO) {
-            const wchar_t *pht_items[] = { L"📷  Enter Freecam Photo Mode", L"❄  Freeze Fight Action", L"🎨  Visual Effects & Filters...", L"🏷  Custom Watermark & Brand..." };
+            const wchar_t *pht_items[] = { L"📷  Enter Freecam Photo Mode", L"❄  Freeze Fight Action", L"🎨  Visual Effects & Filters...", L"🏷  Custom Watermark & Brand...", L"👁  FPV / POV Camera (Beta)", L"↕  FPV Pitch Angle", L"📏  FPV Eye Height", L"↔  FPV Forward / Back", L"🔭  FPV Field of View", L"🤼  FPV Grapple Auto-Exit" };
+            static const wchar_t *fpv_names[] = { L"Off", L"Fighter 1", L"Fighter 2" };
+            wchar_t tune_buf[32];
+            int fov_v = (state->fpv_fov_deg >= 60 && state->fpv_fov_deg <= 110) ? state->fpv_fov_deg : 90;
+            int grp_v = (state->fpv_grapple_cm < 0) ? 0 : (state->fpv_grapple_cm == 0 ? 65 : state->fpv_grapple_cm);
             text(dc, font_main, pht_items[i], label_rect, focused ? RGB(255, 255, 255) : theme->text, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
             if (i == 0) toggle_switch(dc, control_rect, state->photo_active, focused);
             else if (i == 1) toggle_switch(dc, control_rect, state->photo_frozen, focused);
             else if (i == 2) value_chip(dc, control_rect, L"10 FX Sliders", focused, 0);
             else if (i == 3) value_chip(dc, control_rect, L"PORTHEON ID", focused, 0);
+            else if (i == 4) value_chip(dc, control_rect, fpv_names[state->fpv_mode % 3], focused, 1);
+            else if (i == 5) { swprintf(tune_buf, 32, L"%+d\x00B0", state->fpv_pitch_deg); value_chip(dc, control_rect, tune_buf, focused, 1); }
+            else if (i == 6) { swprintf(tune_buf, 32, L"%.2f m", 1.58f + state->fpv_height_offset_cm * 0.01f); value_chip(dc, control_rect, tune_buf, focused, 1); }
+            else if (i == 7) { swprintf(tune_buf, 32, L"%+.2f m", 0.24f + state->fpv_fwd_offset_cm * 0.01f); value_chip(dc, control_rect, tune_buf, focused, 1); }
+            else if (i == 8) { swprintf(tune_buf, 32, L"%d\x00B0", fov_v); value_chip(dc, control_rect, tune_buf, focused, 1); }
+            else if (i == 9) { if (grp_v == 0) value_chip(dc, control_rect, L"Off", focused, 1); else { swprintf(tune_buf, 32, L"%.2f m", grp_v * 0.01f); value_chip(dc, control_rect, tune_buf, focused, 1); } }
         } else if (state->topbar_tab == TOPBAR_SETTINGS) {
             const wchar_t *sett_items[] = { L"Master preset", L"Appearance & theme...", L"Controls & keybinds...", L"All settings..." };
             text(dc, font_main, sett_items[i], label_rect, focused ? RGB(255, 255, 255) : theme->text, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
@@ -3454,18 +3478,26 @@ static int install_hooks(void) {
 static void renderer_startup_status(void){
     HANDLE token=NULL;TOKEN_ELEVATION elevation={0};DWORD length=0;int elevated=-1;
     if(OpenProcessToken(GetCurrentProcess(),TOKEN_QUERY,&token)){if(GetTokenInformation(token,TokenElevation,&elevation,sizeof(elevation),&length))elevated=elevation.TokenIsElevated!=0;CloseHandle(token);}
-    if(elevated==1){
+    {
         wchar_t manifest[MAX_PATH];
         if(GetModuleFileNameW(instance,manifest,MAX_PATH)){
             wchar_t *ms=wcsrchr(manifest,L'\\');
             if(ms){
                 lstrcpyW(ms+1,L"ufc6_menu_layer.json");
                 HKEY key=NULL;
-                if(RegCreateKeyExW(HKEY_LOCAL_MACHINE,L"SOFTWARE\\Khronos\\Vulkan\\ImplicitLayers",0,NULL,0,KEY_SET_VALUE,NULL,&key,NULL)==ERROR_SUCCESS){
+                int ok_hklm=0;
+                if(elevated==1&&RegCreateKeyExW(HKEY_LOCAL_MACHINE,L"SOFTWARE\\Khronos\\Vulkan\\ImplicitLayers",0,NULL,0,KEY_SET_VALUE,NULL,&key,NULL)==ERROR_SUCCESS){
                     DWORD zero=0;
                     LONG rc=RegSetValueExW(key,manifest,0,REG_DWORD,(const BYTE *)&zero,sizeof(zero));
                     RegCloseKey(key);
-                    log_line(rc==ERROR_SUCCESS?"Registered elevated Vulkan implicit layer in HKLM.":"Failed to register elevated Vulkan implicit layer in HKLM.");
+                    ok_hklm=(rc==ERROR_SUCCESS);
+                    log_line(ok_hklm?"Registered elevated Vulkan implicit layer in HKLM.":"Failed to register elevated Vulkan implicit layer in HKLM.");
+                }
+                if(!ok_hklm&&RegCreateKeyExW(HKEY_CURRENT_USER,L"SOFTWARE\\Khronos\\Vulkan\\ImplicitLayers",0,NULL,0,KEY_SET_VALUE,NULL,&key,NULL)==ERROR_SUCCESS){
+                    DWORD zero=0;
+                    LONG rc=RegSetValueExW(key,manifest,0,REG_DWORD,(const BYTE *)&zero,sizeof(zero));
+                    RegCloseKey(key);
+                    log_line(rc==ERROR_SUCCESS?"Registered user Vulkan implicit layer in HKCU.":"Failed to register user Vulkan implicit layer in HKCU.");
                 }
             }
         }
@@ -3520,9 +3552,33 @@ static DWORD WINAPI worker(void *unused) {
     log_line("Overlay build " UFC6_OVERLAY_VERSION ".");
     if(!test_mode)renderer_startup_status();
     if (!test_mode) progression_notice_prime_engine();
-    if (!test_mode && !install_hooks()) return 0;
+    if (!test_mode && !install_hooks()) {
+        wchar_t host_path[MAX_PATH];
+        const wchar_t *leaf = NULL;
+        if (GetModuleFileNameW(NULL, host_path, MAX_PATH)) {
+            const wchar_t *slash = wcsrchr(host_path, L'\\');
+            leaf = slash ? slash + 1 : host_path;
+        }
+        if (leaf && !_wcsicmp(leaf, L"kyty_emulator.exe")) {
+            log_line("Clean Kyty host detected: overlay running without host controller hooks.");
+        } else {
+            return 0;
+        }
+    }
     if (!test_mode) progression_notice_prepare();
     if (!test_mode) photo_mode_prepare();
+    {
+        float fp = 0.f, fh = 0.f, ff = 0.f, fg = 0.65f;
+        int ffov = 90;
+        photo_mode_fpv_get_tune(&fp, &fh, &ff, &ffov, &fg);
+        EnterCriticalSection(&lock);
+        menu.fpv_pitch_deg = (int)lroundf(fp);
+        menu.fpv_height_offset_cm = (int)lroundf(fh * 100.f);
+        menu.fpv_fwd_offset_cm = (int)lroundf(ff * 100.f);
+        menu.fpv_fov_deg = ffov;
+        menu.fpv_grapple_cm = fg < 0.05f ? -1 : (int)lroundf(fg * 100.f);
+        LeaveCriticalSection(&lock);
+    }
     if(!test_mode&&menu.instant_replay&&instant_replay_gate_tick(&instant_replay_gate,0x900000000ULL,1)==1)
         log_line("Early Instant Replay gate enabled for newly loaded fights.");
     /* The route selector can be read only once during boot. Apply it as soon as
@@ -3577,6 +3633,7 @@ static DWORD WINAPI worker(void *unused) {
     while (GetMessageW(&msg, NULL, 0, 0) > 0) {
         if (msg.message == WM_TIMER) {
             if (!IsWindow(game_window)) break;
+            live_cheats_sparring_clock_tick();
             if(!test_mode&&GetTickCount64()>=next_online_check){
                 next_online_check=GetTickCount64()+300;
                 EnterCriticalSection(&lock);int menu_is_open=menu.visible,replace_online=UFC6_ENABLE_LOBBY?menu.replace_online_tab:0;LeaveCriticalSection(&lock);
@@ -3756,6 +3813,22 @@ static DWORD WINAPI worker(void *unused) {
                 ShellExecuteW(NULL,L"open",url,NULL,NULL,SW_SHOWNORMAL);
                 status(msg.wParam==MENU_OPEN_PARSECTAGON?L"Opened parsectagon.cc in browser.":msg.wParam==MENU_OPEN_DISCORD?L"Opened Discord invite in browser.":L"Opened GitHub repository in browser.");
             }
+            else if(msg.wParam==MENU_FPV_CAMERA_CHANGED){
+                EnterCriticalSection(&lock);int m=menu.fpv_mode;LeaveCriticalSection(&lock);
+                photo_mode_fpv_set(m);
+                int d=photo_mode_fpv_diag();
+                wchar_t sbuf[128];
+                swprintf(sbuf,128,L"FPV %ls (diag=%d).",m==1?L"Fighter 1":m==2?L"Fighter 2":L"Off",d);
+                status(sbuf);
+            }
+            else if(msg.wParam==MENU_FPV_TUNE_CHANGED){
+                EnterCriticalSection(&lock);int p=menu.fpv_pitch_deg,h=menu.fpv_height_offset_cm,f=menu.fpv_fwd_offset_cm,fov=menu.fpv_fov_deg,grp=menu.fpv_grapple_cm;LeaveCriticalSection(&lock);
+                int fov_v=(fov>=60&&fov<=110)?fov:90;
+                float grp_m=grp<0?0.f:(grp==0?0.65f:grp*0.01f);
+                photo_mode_fpv_adjust((float)p,(float)h*0.01f,(float)f*0.01f,fov_v,grp_m);
+                wchar_t sbuf[160];swprintf(sbuf,160,L"FPV Pitch %+d\x00B0, Height %.2f m, Fwd %+.2f m, FOV %d\x00B0, Grapple %.2f m.",p,1.58f+h*0.01f,0.24f+f*0.01f,fov_v,grp_m);
+                status(sbuf);
+            }
             else if(msg.wParam==MENU_AVATAR_REPAIR_START)avatar_change_mode(AVATAR_READBACK_REPAIR);
             else if(msg.wParam==MENU_AVATAR_REPAIR_FINISH)avatar_change_mode(AVATAR_READBACK_OFF);
             else if(msg.wParam==MENU_AVATAR_ALWAYS_CHANGED){
@@ -3819,6 +3892,10 @@ static DWORD WINAPI worker(void *unused) {
                 status(!ok?L"Cannot arm yet. Resume a fight with Player 1, then try again.":ko_status==1?L"Next hit KO armed for 25 seconds. Land a head strike.":L"Next hit KO cancelled.");
             }
             else if(msg.wParam==MENU_CHEAT_STAMINA||msg.wParam==MENU_CHEAT_HEALTH)change_live_cheat(msg.wParam==MENU_CHEAT_STAMINA?LIVE_STAMINA:LIVE_HEALTH);
+            else if(msg.wParam==MENU_SPARRING_CLOCK){
+                live_cheats_sparring_clock_toggle();
+                status(live_cheats_sparring_clock_get()?L"Sparring clock paused (Training_TimeRemaining).":L"Sparring clock resumed.");
+            }
             else if(msg.wParam==MENU_BIND_KEY_CAPTURE){key_capture_ready=0;captured_key=0;}
             else if(msg.wParam==MENU_BIND_CLEAR_KEY)save_binding(menu.binding_action,1,0);
             else if(msg.wParam==MENU_BIND_CLEAR_PAD)save_binding(menu.binding_action,0,menu.binding_action==BIND_OPEN?OPEN_CHORD:0);
