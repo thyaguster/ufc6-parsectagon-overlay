@@ -1,3 +1,8 @@
+## v0.9.89 — Out-of-Game Overlay Configurator
+
+- Added **`ufc6_menu_config.exe`**, an out-of-game configurator for Switches & Gameplay, Controller & Keyboard Shortcuts, Appearance, and FPV Camera defaults (`ufc6_fpv.ini`), synced across both `bin` and `novo` (or Clean Kyty).
+- Added a **Configure...** button and an **"Open configurator after install"** option in Setup.
+
 ## v0.9.88 — Experimental FPV Camera, Clean Kyty Setup, & Polish
 
 - **Experimental FPV / POV Camera (Beta)** in the Photo tab: switch between `Off`, `Fighter 1`, and `Fighter 2` first-person views with configurable smoothing, FOV (`60°–110°`), Pitch, Eye Height, Forward/Back offset, Grapple Auto-Exit distance (`0.45–1.00 m`), automatic octagon cage visibility, and persistent `ufc6_fpv.ini` settings.

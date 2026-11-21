@@ -39,7 +39,7 @@ if (-not $Test) {
     Copy-Item -LiteralPath 'src/ufc6_menu_layer.json' -Destination 'dist/ufc6_menu_layer.json'
     & (Join-Path $root 'build-updater.ps1'); if ($LASTEXITCODE) { throw 'Updater build failed' }
     $manifest = [ordered]@{
-        version = '0.9.88'
+        version = '0.9.89'
         parsec_engine_sha256 = 'd65bb89742d4fbaa6d57fde7a97eab7ed34ff4e6b5b0ae2213d6476d19c7c049'
         engine_revision = '3309ab23f'
         engine_sha256 = '8df294a9c7ef98b1db975f0b9b1628dc061764f3035349d9bff7e1d7af846752'
@@ -48,6 +48,7 @@ if (-not $Test) {
         runtime_bridge = @{target='libwinpthread-1.dll'; original_name='ufc6_pthread_original.dll'; original_sha256='78ebbc1480d62098aa66307db2ff139abc07c137bc188f5b73bf7b131492932c'}
         companion_files = [ordered]@{
             'ufc6_menu_update.exe' = (Get-FileHash -LiteralPath 'dist/ufc6_menu_update.exe').Hash.ToLowerInvariant()
+            'ufc6_menu_config.exe' = (Get-FileHash -LiteralPath 'dist/ufc6_menu_config.exe').Hash.ToLowerInvariant()
             'ufc6_menu_icons.exe' = (Get-FileHash -LiteralPath 'dist/ufc6_menu_icons.exe').Hash.ToLowerInvariant()
             'libwinpthread-1.dll' = (Get-FileHash -LiteralPath 'dist/libwinpthread-1.dll').Hash.ToLowerInvariant()
             'ufc6_menu_layer.dll' = (Get-FileHash -LiteralPath 'dist/ufc6_menu_layer.dll').Hash.ToLowerInvariant()
@@ -87,6 +88,7 @@ if (-not $Test) {
         'ufc6_menu_restart.exe' = $manifest.companion_files['ufc6_menu_restart.exe']
         'ufc6_menu_icons.exe' = $manifest.companion_files['ufc6_menu_icons.exe']
         'ufc6_menu_update.exe' = $manifest.companion_files['ufc6_menu_update.exe']
+        'ufc6_menu_config.exe' = $manifest.companion_files['ufc6_menu_config.exe']
     }
     $manifest.new_engine = [ordered]@{
         version = $manifest.version

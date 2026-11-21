@@ -325,7 +325,8 @@ namespace UFC6OverlaySetup {
         readonly Manager manager;
         readonly TextBox folder = new TextBox();
         readonly TextBox status = new TextBox();
-        readonly ModernButton support = new ModernButton();
+        readonly ModernButton support = new ModernButton(), configure = new ModernButton();
+        readonly CheckBox autoConfigure = new CheckBox { Text = "Open configurator after install", Checked = true, AutoSize = true, ForeColor = ModernUi.Muted, BackColor = ModernUi.Background, Font = new Font("Segoe UI", 9) };
         readonly ModernButton browse = new ModernButton(), check = new ModernButton(), parsectagon = new ModernButton(), discord = new ModernButton(), install = new ModernButton(), remove = new ModernButton(), updates = new ModernButton();
         bool busy;
         bool repairMode;
@@ -352,18 +353,21 @@ namespace UFC6OverlaySetup {
             infoCard.Controls.Add(ModernUi.Label("2   Check compatibility",20,16,650,27,12,true));
             status.SetBounds(20,52,656,104);ModernUi.Status(status);
             status.Text="Choose PORTHEON's UFC6 folder (bin / novo) or a Clean Kyty folder (kyty_emulator.exe).\r\nPORTHEON mode covers both bin and novo when present; Clean Kyty keeps libwinpthread-1.dll intact.\r\nClick Check folder to verify the installation location.";infoCard.Controls.Add(status);
-            support.Text="Export support report...";support.SetBounds(32,574,238,44);support.Enabled=false;
+            support.Text="Support report...";support.SetBounds(32,574,196,44);support.Enabled=false;
             support.Click+=delegate{try{using(var diagnostic=new DiagnosticsForm(manager.Version,Diagnostics.Folder(folder.Text))){diagnostic.ShowDialog(this);}}catch(Exception error){status.Text=error.Message;}};
-            install.Text="Install / Update";install.SetBounds(288,574,214,44);install.Tone=ButtonTone.Primary;install.Enabled=false;
-            remove.Text="Remove overlay";remove.SetBounds(518,574,210,44);remove.Tone=ButtonTone.Danger;remove.Enabled=false;
-            var kept=ModernUi.Label("Settings, screenshots and save backups are kept.",32,631,696,22,9,false,true);
-            Controls.AddRange(new Control[]{ModernUi.Logo(32,70,66),title,hint,version,pathCard,infoCard,support,install,remove,kept});
+            configure.Text="Configure...";configure.SetBounds(238,574,124,44);configure.Enabled=false;
+            configure.Click+=delegate{try{using(var cfg=new ConfiguratorForm(folder.Text)){cfg.ShowDialog(this);}}catch(Exception error){status.Text=error.Message;}};
+            install.Text="Install / Update";install.SetBounds(372,574,176,44);install.Tone=ButtonTone.Primary;install.Enabled=false;
+            remove.Text="Remove overlay";remove.SetBounds(558,574,170,44);remove.Tone=ButtonTone.Danger;remove.Enabled=false;
+            autoConfigure.Location=new Point(478,630);
+            var kept=ModernUi.Label("Settings, screenshots and save backups are kept.",32,631,440,22,9,false,true);
+            Controls.AddRange(new Control[]{ModernUi.Logo(32,70,66),title,hint,version,pathCard,infoCard,support,configure,install,remove,autoConfigure,kept});
             parsectagon.Click+=delegate{try{Process.Start(new ProcessStartInfo("https://parsectagon.cc"){UseShellExecute=true});}catch(Exception error){status.Text="Could not open Parsectagon: "+error.Message;}};
             discord.Click+=delegate{try{Process.Start(new ProcessStartInfo("https://discord.gg/a84pBw2Ff"){UseShellExecute=true});}catch(Exception error){status.Text="Could not open Discord: "+error.Message;}};
             updates.Click+=delegate{using(var update=new UpdateForm(manager.Version,folder.Text)){update.ShowDialog(this);if(update.InstallerOpened)Close();}};
             AcceptButton=check;
             browse.Click+=delegate{try{string selected=FolderPicker.Select(Handle,folder.Text);if(selected!=null){folder.Text=selected;Run(null);}}catch(Exception error){status.Text="Could not open the folder picker: "+error.Message;}};
-            folder.TextChanged += delegate { support.Enabled = install.Enabled = remove.Enabled = false; };
+            folder.TextChanged += delegate { support.Enabled = configure.Enabled = install.Enabled = remove.Enabled = false; };
             check.Click += delegate { Run(null); };
             install.Click += delegate { Run(false, repairMode); };
             remove.Click += delegate { if (MessageBox.Show(this,"Remove the overlay from both installed engine folders? Settings and screenshots will be kept.","Remove overlay",MessageBoxButtons.YesNo,MessageBoxIcon.Question,MessageBoxDefaultButton.Button2) == DialogResult.Yes) Run(true, false); };
@@ -374,7 +378,7 @@ namespace UFC6OverlaySetup {
         void Run(bool? removal,bool repair) {
             if (busy) return;
             busy = true; string path = folder.Text;
-            folder.Enabled = browse.Enabled = check.Enabled = updates.Enabled = support.Enabled = install.Enabled = remove.Enabled = false;
+            folder.Enabled = browse.Enabled = check.Enabled = updates.Enabled = support.Enabled = configure.Enabled = install.Enabled = remove.Enabled = false;
             status.Text = removal.HasValue ? (repair ? "Repairing overlay…" : "Applying changes…") : "Checking engine and installed files…"; UseWaitCursor = true;
             var worker = new BackgroundWorker();
             worker.DoWork += delegate(object sender,DoWorkEventArgs e) {
@@ -388,10 +392,13 @@ namespace UFC6OverlaySetup {
                 else {
                     var values = (object[])e.Result; var state = (Inspection)values[0]; folder.Text = state.Folder;
                     status.Text = values[1] == null ? state.Summary(manager) : (string)values[1];
-                    support.Enabled=true;
+                    support.Enabled = configure.Enabled = true;
                     repairMode = (state.PortheonReplaced || state.SiblingPortheonReplaced) && state.HardConflicts.Count == 0;
                     install.Text = repairMode ? "Repair / Reinstall" : "Install / Update";
                     install.Enabled = state.Supported && state.RuntimeAvailable && (state.Conflicts.Count == 0 || state.PortheonReplaced); remove.Enabled = (state.Installed > 0 || state.SiblingInstalled > 0) && state.Conflicts.Count == 0;
+                    if (removal.HasValue && !removal.Value && autoConfigure.Checked) {
+                        try { using (var cfg = new ConfiguratorForm(state.Folder)) cfg.ShowDialog(this); } catch { }
+                    }
                 }
                 worker.Dispose();
             };

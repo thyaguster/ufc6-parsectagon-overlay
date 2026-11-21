@@ -7,5 +7,5 @@ using System.Reflection;
 #endif
 [assembly: AssemblyProduct("UFC 6 Parsectagon Overlay")]
 [assembly: AssemblyDescription("Install, update, or remove UFC 6 Parsectagon Overlay for supported PORTHEON engines.")]
-[assembly: AssemblyVersion("0.9.88.0")]
-[assembly: AssemblyFileVersion("0.9.88.0")]
+[assembly: AssemblyVersion("0.9.89.0")]
+[assembly: AssemblyFileVersion("0.9.89.0")]

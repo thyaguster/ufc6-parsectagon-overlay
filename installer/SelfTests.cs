@@ -260,7 +260,7 @@ namespace UFC6OverlaySetup {
                 passed.Add("PASS: Clean Kyty folder install/remove preserves stock libwinpthread-1.dll.");
                 var diagnosticHashes=new System.Web.Script.Serialization.JavaScriptSerializer().Deserialize<Dictionary<string,string>>(Encoding.UTF8.GetString(Program.Resource("diagnostics-components.json")).TrimStart('\ufeff'));
                 Assert(diagnosticHashes["version.dll"]==embedded.dll_sha256,"Diagnostic core fingerprint must match the shipped core.");
-                foreach(var item in embedded.companion_files.Where(p=>p.Key!="ufc6_menu_update.exe"))Assert(diagnosticHashes[item.Key]==item.Value,"Diagnostic companion fingerprint must match the shipped payload: "+item.Key);
+                foreach(var item in embedded.companion_files.Where(p=>p.Key!="ufc6_menu_update.exe"&&p.Key!="ufc6_menu_config.exe"))Assert(diagnosticHashes[item.Key]==item.Value,"Diagnostic companion fingerprint must match the shipped payload: "+item.Key);
                 passed.Add(DiagnosticsTests.Run());
                 File.WriteAllLines(report,passed);
             } finally {
