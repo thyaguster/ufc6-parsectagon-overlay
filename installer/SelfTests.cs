@@ -36,7 +36,7 @@ namespace UFC6OverlaySetup {
             try {
                 string folder = Path.Combine(root,"game with spaces","bin"); Directory.CreateDirectory(folder);
                 string engine = Path.Combine(folder,"UFC 6.exe"); File.WriteAllBytes(engine,Bytes("fixture engine"));
-                var payload = new Dictionary<string,byte[]> { {"ufc6_menu_layer.dll",Bytes("new layer")}, {"ufc6_menu_layer.json",Bytes("new manifest")}, {"ufc6_menu_restart.exe",Bytes("new helper")}, {"ufc6_menu_update.exe",Bytes("update helper fixture")}, {"version.dll",Bytes("new core")} };
+                var payload = new Dictionary<string,byte[]> { {"ufc6_menu_layer.dll",Bytes("new layer")}, {"ufc6_menu_layer.json",Bytes("new manifest")}, {"ufc6_menu_restart.exe",Bytes("new helper")}, {"ufc6_menu_config.exe",Bytes("config helper fixture")}, {"version.dll",Bytes("new core")} };
                 var release = new Release { version = "fixture", engine_sha256 = Manager.HashFile(engine), dll_sha256 = Manager.Hash(payload["version.dll"]), previous_dll_sha256 = new [] {Manager.Hash(Bytes("old core"))}, companion_files = payload.Where(p => p.Key != "version.dll").ToDictionary(p => p.Key,p => Manager.Hash(p.Value)), previous_companion_sha256 = new Dictionary<string,string[]> { {"ufc6_menu_layer.dll",new [] {Manager.Hash(Bytes("old layer"))}} } };
                 var manager = new Manager(release,payload);
                 Assert(Manager.Normalize(Directory.GetParent(folder).FullName) == folder,"Game root must resolve to bin.");
@@ -73,8 +73,12 @@ namespace UFC6OverlaySetup {
                 string ini = Path.Combine(folder,"ufc6-quit-menu.ini"), screenshot = Path.Combine(folder,"existing-screenshot.png");
                 File.WriteAllText(ini,"[Menu]\nUIScale=175\nAutoLaunchAfterRestart=0\nGuideButtonOpensMenu=0\n"); File.WriteAllBytes(screenshot,Bytes("existing image"));
                 string settings = File.ReadAllText(ini);
-                manager.Apply(folder,false); Assert(manager.Inspect(folder).Current == manager.Order.Count,"Installation must match every release hash.");
-                manager.Apply(folder,false); Assert(!Directory.GetFiles(folder,"*.bak").Any(),"Idempotent install must not create backups.");
+                File.WriteAllBytes(Path.Combine(folder,"ufc6_menu_update.exe"),Bytes("legacy updater"));
+                manager.Apply(folder,false);
+                Assert(!File.Exists(Path.Combine(folder,"ufc6_menu_update.exe")),"Legacy ufc6_menu_update.exe must be removed when upgrading."); Assert(manager.Inspect(folder).Current == manager.Order.Count,"Installation must match every release hash.");
+                File.WriteAllBytes(Path.Combine(folder,"ufc6_menu_update.exe"),Bytes("legacy updater"));
+                manager.Apply(folder,false);
+                Assert(!File.Exists(Path.Combine(folder,"ufc6_menu_update.exe")),"Legacy ufc6_menu_update.exe must be removed when upgrading."); Assert(!Directory.GetFiles(folder,"*.bak").Any(),"Idempotent install must not create backups.");
                 manager.Apply(folder,true); Assert(manager.Inspect(folder).Installed == 0,"Remove must uninstall all managed files.");
                 Assert(File.ReadAllText(ini) == settings && File.ReadAllText(screenshot) == "existing image","User data must survive install and removal.");
                 passed.Add("PASS: root/bin selection, spaced paths, install/remove, idempotence, settings and screenshot preservation.");

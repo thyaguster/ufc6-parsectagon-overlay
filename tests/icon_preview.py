@@ -420,7 +420,7 @@ try:
         assert dll.MenuTestVisibleRows()==12 and dll.MenuTestFontSize()==18
         dll.Ufc6MenuExtent(2560,1440,c.byref(width),c.byref(height));assert (width.value,height.value)==(570,564)
         render("cheats-tall.png")
-        for _ in range(11):press(0x40)
+        for _ in range(12):press(0x40)
         render("cheats-tall-back.png")
         dll.Ufc6MenuExtent(640,360,c.byref(width),c.byref(height));assert width.value<=608 and height.value<=328
         render("cheats-tall-small-viewport.png",(640,360))
@@ -666,12 +666,12 @@ try:
         press(0x40);press(0x4000);assert page()==8
         render("sparring-grade-a-confirm.png")
         press(0x40);press(0x4000);assert page()==7
-        press(0x40);press(0x4000);assert page()==11
+        press(0x40);press(0x40);press(0x40);press(0x4000);assert page()==11
         render("savegame-backups.png")
         press(0x4000);assert page()==11
         render("savegame-backup-request.png")
         press(0x40);press(0x4000);assert page()==11
-        press(0x2000);assert page()==7 and dll.MenuTestSnapshot()&15==10
+        press(0x2000);assert page()==7 and dll.MenuTestSnapshot()&15==12
         press(0x40);render("cheats-back-scrolled.png");press(0x4000);assert page()==0 and dll.MenuTestSnapshot()&15==3
         press(0x40);press(0x4000)
         for _ in range(9):press(0x40)

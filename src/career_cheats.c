@@ -22,13 +22,18 @@ static DirtyFn game_dirty;
 static SRWLOCK guard=SRWLOCK_INIT;
 static CareerSnapshot snapshot;
 static uint64_t queued;
-static int reward_multiplier=1,reward_active_multiplier=1;static uintptr_t reward_store,reward_packed;static uint32_t reward_rows,reward_original[2048],reward_applied[2048];
+static int reward_multiplier=1,reward_active_multiplier=1,move_xp_multiplier=1;static uintptr_t reward_store,reward_packed;static uint32_t reward_rows,reward_original[2048],reward_applied[2048];
+static uintptr_t prev_move_xp_c;static uint32_t prev_move_xp_rows,prev_move_xp[1024];
 typedef struct {CareerField first;uint32_t rows,stride;} GradePack;
 static uint32_t expected_grade_ids[5];
+static uint32_t expected_move_rows;
+static int expected_move_group;
 static volatile LONG64 next_probe;
 static volatile LONG diagnostic_reason,diagnostic_hooks,diagnostic_probes;
 static void diagnose(int reason){InterlockedExchange(&diagnostic_reason,reason);}
-static uintptr_t cache_collection,cache_begin;
+static uintptr_t cache_collection,cache_begin,last_moves_collection;
+static uint64_t next_moves_probe;
+static uint32_t cached_moves_ready,cached_moves_upgradable;
 static size_t cached_slot[2]={SIZE_MAX,SIZE_MAX};
 #ifdef CAREER_CHEATS_TEST
 static uint64_t probe_count;
@@ -37,12 +42,19 @@ static const unsigned char user_signature[]={0x55,0x48,0x89,0xe5,0x41,0x57,0x41,
 static int rd(uintptr_t a,void *out,size_t n){SIZE_T got=0;return a>=0x10000&&ReadProcessMemory(GetCurrentProcess(),(void*)a,out,n,&got)&&got==n;}
 static uintptr_t pointer(uintptr_t a){uintptr_t p=0;rd(a,&p,8);return p;}
 static int u32(uintptr_t a,uint32_t *out){return rd(a,out,4);}
+static int readable(uintptr_t a,size_t n){MEMORY_BASIC_INFORMATION m;return a>=0x10000&&VirtualQuery((void*)a,&m,sizeof(m))&&m.State==MEM_COMMIT&&!(m.Protect&PAGE_GUARD)&&(m.Protect&(PAGE_READONLY|PAGE_READWRITE|PAGE_WRITECOPY|PAGE_EXECUTE_READ|PAGE_EXECUTE_READWRITE|PAGE_EXECUTE_WRITECOPY))&&a+n>=a&&a+n<=(uintptr_t)m.BaseAddress+m.RegionSize;}
 static int writable(uintptr_t a,size_t n){MEMORY_BASIC_INFORMATION m;return VirtualQuery((void*)a,&m,sizeof(m))&&m.State==MEM_COMMIT&&!(m.Protect&PAGE_GUARD)&&(m.Protect&(PAGE_READWRITE|PAGE_WRITECOPY))&&a+n>=a&&a+n<=(uintptr_t)m.BaseAddress+m.RegionSize;}
 static int name_is(uintptr_t a,const char *name){
     unsigned char text[16];char full[80];size_t n=strlen(name)+1;
     if(n>sizeof(full)||!rd(a,text,16))return 0;
     if(text[15]&128){uintptr_t p=0;memcpy(&p,text,8);return rd(p,full,n)&&!memcmp(full,name,n);}
     return n<=16&&!memcmp(text,name,n);
+}
+static int name_starts_with(uintptr_t a,const char *prefix){
+    unsigned char text[16];char full[80];size_t n=strlen(prefix);
+    if(n>=sizeof(full)||!rd(a,text,16))return 0;
+    if(text[15]&128){uintptr_t p=0;memcpy(&p,text,8);return rd(p,full,n)&&!memcmp(full,prefix,n);}
+    return n<16&&!memcmp(text,prefix,n);
 }
 static int schema(uintptr_t store,uintptr_t *begin,size_t count){
     if(pointer(store)!=guest+0x9bf7be8)return 0;
@@ -250,12 +262,161 @@ static int resolve(uintptr_t root,CareerField result[2],uintptr_t *owner){
     if(!found[0]||!found[1]){int k=!found[0]?0:1;diagnose((failures[k]==2?CAREER_DIAG_MONEY_READONLY:failures[k]==1?CAREER_DIAG_MONEY_LAYOUT:CAREER_DIAG_MONEY)+k);return 0;}
     cache_collection=c;cache_begin=begin;memcpy(cached_slot,slot,sizeof(slot));*owner=c;diagnose(CAREER_DIAG_READY);return 1;
 }
+static int dirty_safe(uintptr_t store){
+    uintptr_t addr=pointer(store+0x10)+0xe8;
+    if(!grade_write_access(addr))return 0;
+    MEMORY_BASIC_INFORMATION m;DWORD old=0,ignored=0;int changed=0;
+    if(!VirtualQuery((void*)addr,&m,sizeof(m)))return 0;
+    if(m.Protect==PAGE_READONLY){
+        DWORD protection=m.Type==MEM_MAPPED?PAGE_WRITECOPY:PAGE_READWRITE;
+        if(!VirtualProtect((void*)addr,4,protection,&old))return 0;changed=1;
+    }
+    game_dirty(store);
+    return !changed||VirtualProtect((void*)addr,4,old,&ignored);
+}
+static int master_hash_lookup(uintptr_t m,uint32_t key,uint32_t *val_out){
+    uintptr_t b0=pointer(m+0xb8),b1=pointer(m+0xc0);
+    if(!b0||b1<=b0||(b1-b0)%8||(b1-b0)/8>200000||!readable(b0,(size_t)(b1-b0)))return 0;
+    size_t n=(b1-b0)/8;const uint32_t *pairs=(const uint32_t*)b0;
+    for(size_t i=0;i<n;++i){
+        if(pairs[i*2]==key){*val_out=pairs[i*2+1];return 1;}
+    }
+    return 0;
+}
+static int master_hash_reverse(uintptr_t m,uint32_t val,uint32_t *key_out){
+    uintptr_t b0=pointer(m+0xb8),b1=pointer(m+0xc0);
+    if(!b0||b1<=b0||(b1-b0)%8||(b1-b0)/8>200000||!readable(b0,(size_t)(b1-b0)))return 0;
+    size_t n=(b1-b0)/8;const uint32_t *pairs=(const uint32_t*)b0;
+    for(size_t i=0;i<n;++i){
+        if(pairs[i*2+1]==val){*key_out=pairs[i*2];return 1;}
+    }
+    return 0;
+}
+static int store_read_u32_field(uintptr_t store,uint32_t row,uint32_t idx,uint32_t *out){
+    uintptr_t s=pointer(store+8),fb=pointer(s+0x30),fe=pointer(s+0x38),p=pointer(store+0x30);
+    if(!fb||fe<=fb||(idx+1)*80>(size_t)(fe-fb))return 0;
+    uint16_t bits=0;uint32_t bias=0,rows=0,stride=0,start=0,bit=0,w=0;
+    if(!rd(fb+idx*80+0x30,&bits,2)||!u32(fb+idx*80+0x34,&bias)||!u32(p+0x10,&rows)||row>=rows||
+       !u32(p+0xc,&stride)||!stride||!u32(p+0x18,&start)||!u32(p+0x20+idx*4,&bit)||bit/32>=stride||
+       !u32(p+(start+row*stride+bit/32)*4,&w))return 0;
+    uint32_t mask=bits>=32?0xffffffffu:((1u<<bits)-1u);
+    *out=bits>32?w:(((w>>(bit%32))&mask)+bias);return 1;
+}
+static uintptr_t find_store_by_tag(uintptr_t owner,uint32_t tag,int is_master){
+    uintptr_t begin=pointer(owner+(is_master?0x148:0x108)),end=pointer(owner+(is_master?0x150:0x110));
+    if(!begin||end<=begin||(end-begin)%8||(end-begin)/8>16384)return 0;
+    size_t n=(end-begin)/8;
+    for(size_t i=0;i<n;++i){uintptr_t s=pointer(begin+i*8);uint32_t t=0;if(s&&u32(s+0x2c,&t)&&t==tag)return s;}
+    return 0;
+}
+static int move_group_matches(uintptr_t slot_name_addr,uint32_t tag,int group){
+    switch(group){
+        case MOVE_GROUP_PUNCHES:return tag==0x14f||tag==0x16a||tag==0x166;
+        case MOVE_GROUP_KICKS:return tag==0x137;
+        case MOVE_GROUP_CLINCH:return tag==0x11f||tag==0x122;
+        case MOVE_GROUP_TAKEDOWNS:return tag==0x15e||tag==0x154;
+        case MOVE_GROUP_GROUND:return (tag==0x134||tag==0x130)&&!name_starts_with(slot_name_addr,"Submission");
+        case MOVE_GROUP_SUBMISSIONS:return name_starts_with(slot_name_addr,"Submission");
+        case MOVE_GROUP_COMBOS:return tag==0x12a;
+        default:return 1;
+    }
+}
+static int moveset_upgrade(uintptr_t store525,uintptr_t c,int group,uint32_t *upgradable_out,int apply){
+    uintptr_t m=pointer(c+0xf0),b525=0;if(!m||!schema(store525,&b525,64))return 0;
+    uint32_t bf_idx=UINT32_MAX;for(uint32_t i=0;i<64;++i)if(name_is(b525+i*80,"BaseFighter")){bf_idx=i;break;}
+    if(bf_idx==UINT32_MAX)return 0;
+    uint32_t bf_h=0;if(!store_read_u32_field(store525,0,bf_idx,&bf_h)||!bf_h)return 0;
+    uintptr_t st_bf=find_store_by_tag(c,bf_h>>17,0);if(!st_bf)return 0;
+    uintptr_t b_bf=0;if(!schema(st_bf,&b_bf,118))return 0;
+    uint32_t ms_idx=UINT32_MAX;for(uint32_t i=0;i<118;++i)if(name_is(b_bf+i*80,"MoveSet")){ms_idx=i;break;}
+    if(ms_idx==UINT32_MAX)return 0;
+    uint32_t ms_h=0;if(!store_read_u32_field(st_bf,bf_h&0xffffu,ms_idx,&ms_h)||!ms_h)return 0;
+    uintptr_t st_ms_arr=find_store_by_tag(c,ms_h>>17,0);if(!st_ms_arr)return 0;
+    uintptr_t p_arr=pointer(st_ms_arr+0x30);uint32_t arr_stride=0,arr_rows=0,arr_start=0;
+    if(!u32(p_arr+0xc,&arr_stride)||!u32(p_arr+0x10,&arr_rows)||!u32(p_arr+0x18,&arr_start)||(ms_h&0xffffu)>=arr_rows)return 0;
+    uintptr_t st_119=0,fb_tags[8]={0};uint32_t fb_rows[8]={0},fb_count=0;
+    for(uint32_t k=0;k<arr_stride&&k<8;++k){
+        uint32_t h=0;if(!u32(p_arr+(arr_start+(ms_h&0xffffu)*arr_stride+k)*4,&h)||!h)continue;
+        if(h&0x80000000u){uint32_t v=0;if(master_hash_lookup(m,h,&v)){uintptr_t s=find_store_by_tag(m,v>>17,1);if(s){fb_tags[fb_count]=s;fb_rows[fb_count]=v&0xffffu;++fb_count;}}}
+        else{uintptr_t s=find_store_by_tag(c,h>>17,0);if(s)st_119=s;}
+    }
+    if(!st_119)return 0;
+    uintptr_t b119=0;if(!schema(st_119,&b119,182))return 0;
+    uintptr_t p119=pointer(st_119+0x30);uint32_t start119=0,stride119=0;
+    if(!u32(p119+0x18,&start119)||!u32(p119+0xc,&stride119)||stride119<182)return 0;
+    if(!writable(p119+(uintptr_t)start119*4,stride119*4)||!grade_write_access(pointer(st_119+0x10)+0xe8))return 0;
+    uint32_t upg=0;
+    for(uint32_t j=0;j<182;++j){
+        if(name_is(b119+j*80,"Overrides")||!strncmp((const char*)(b119+j*80),"PatchSlot",9))continue;
+        uint32_t bit=0,key=0;if(!u32(p119+0x20+j*4,&bit)||bit/32>=stride119||!u32(p119+(start119+bit/32)*4,&key))continue;
+        if(!key)for(uint32_t f=fb_count;f>0;--f){uint32_t fk=0;if(store_read_u32_field(fb_tags[f-1],fb_rows[f-1],j,&fk)&&fk){key=fk;break;}}
+        if(!key)continue;
+        uint32_t val=key;if((key&0x80000000u)&&!master_hash_lookup(m,key,&val))continue;
+        uint32_t tag=val>>17;if(!move_group_matches(b119+j*80,tag,group))continue;
+        uintptr_t st_moves=find_store_by_tag(m,tag,1);if(!st_moves)continue;
+        uintptr_t b_mv=0;if(!schema(st_moves,&b_mv,15)||!name_is(b_mv+3*80,"Id")||!name_is(b_mv+7*80,"Level")||!name_is(b_mv+14*80,"SkinValue"))continue;
+        uint32_t mv_rows=0;if(!u32(pointer(st_moves+0x30)+0x10,&mv_rows))continue;
+        uint32_t r=val&0xffffu,lv=0,id=0,skin=0;
+        if(!store_read_u32_field(st_moves,r,7,&lv)||lv<1||lv>=5||!store_read_u32_field(st_moves,r,3,&id)||!store_read_u32_field(st_moves,r,14,&skin))continue;
+        uint32_t r5=r+(5-lv),lv5=0,id5=0,skin5=0,key5=(tag<<17)|r5;
+        if(r5>=mv_rows||!store_read_u32_field(st_moves,r5,7,&lv5)||lv5!=5||!store_read_u32_field(st_moves,r5,3,&id5)||id5!=id||!store_read_u32_field(st_moves,r5,14,&skin5)||skin5!=skin)continue;
+        ++upg;
+        if(apply){
+            (void)master_hash_reverse(m,(tag<<17)|r5,&key5);
+            *(volatile uint32_t*)(p119+(start119+bit/32)*4)=key5;
+        }
+    }
+    if(apply&&upg)dirty_safe(st_119);
+    *upgradable_out=upg;return 1;
+}
+static int move_cpmc_valid(uintptr_t store,uintptr_t c,uint32_t tag,uintptr_t *packed_out,uint32_t *rows_out,uint32_t *start_out,uint32_t *size_out){
+    if(!store||pointer(store)!=guest+0x9bf9190||pointer(store+0x10)!=c)return 0;
+    uint32_t st_tag=0;if(!u32(store+0x2c,&st_tag)||st_tag!=tag)return 0;
+    uintptr_t p=pointer(store+0x30);uint32_t magic=0,sz=0,rows=0,rows2=0,start=0;
+    if(!u32(p,&magic)||magic!=0x434d5043u||!u32(p+4,&sz)||!u32(p+0x14,&rows)||!u32(p+0x20,&rows2)||rows!=rows2||!rows||rows>1024||!u32(p+0x18,&start)||start<9||start>64)return 0;
+    *packed_out=p;*rows_out=rows;*start_out=start;*size_out=sz;return 1;
+}
+static int move_arrays_find(uintptr_t store525,uintptr_t store109,uintptr_t c,uintptr_t *xp_store,uintptr_t *lv_store,uintptr_t *lk_store,uintptr_t *xp_packed,uintptr_t *lv_packed,uintptr_t *lk_packed,uint32_t *rows_out,uint32_t *xp_start,uint32_t *lv_start,uint32_t *lk_start,uint32_t *upgradable_out){
+    uintptr_t b=0,b525=0;if(!schema(store109,&b,16)||!name_is(b+5*80,"MoveLevelArray")||!name_is(b+6*80,"MoveXpArray"))return 0;
+    if(!schema(store525,&b525,64))return 0;
+    uint32_t lk_idx=UINT32_MAX;for(uint32_t i=0;i<64;++i)if(name_is(b525+i*80,"MoveLocks")){lk_idx=i;break;}
+    if(lk_idx==UINT32_MAX)return 0;
+    uintptr_t p=pointer(store109+0x30),p525=pointer(store525+0x30);uint32_t start=0,stride=0,lv_bit=0,xp_bit=0,lv_h=0,xp_h=0,s525=0,st525=0,lk_bit=0,lk_h=0;
+    if(!u32(p+0x18,&start)||start<8||start>16384||!u32(p+0xc,&stride)||!stride||stride>4096||
+       !u32(p+0x20+5*4,&lv_bit)||!u32(p+0x20+6*4,&xp_bit)||lv_bit/32>=stride||xp_bit/32>=stride||
+       !u32(p+(start+lv_bit/32)*4,&lv_h)||!u32(p+(start+xp_bit/32)*4,&xp_h)||
+       !u32(p525+0x18,&s525)||s525<8||s525>16384||!u32(p525+0xc,&st525)||!st525||st525>4096||
+       !u32(p525+0x20+lk_idx*4,&lk_bit)||lk_bit/32>=st525||!u32(p525+(s525+lk_bit/32)*4,&lk_h))return 0;
+    uint32_t lv_tag=lv_h>>17,xp_tag=xp_h>>17,lk_tag=lk_h>>17;if(!lv_tag||!xp_tag||!lk_tag||lv_tag==xp_tag)return 0;
+    uintptr_t begin=pointer(c+0x108),end=pointer(c+0x110);
+    if(!begin||end<begin||(end-begin)%8||(end-begin)/8>16384)return 0;
+    size_t n=(end-begin)/8;uintptr_t xps=0,lvs=0,lks=0,xpp=0,lvp=0,lkp=0;uint32_t xpr=0,lvr=0,lkr=0,xpst=0,lvst=0,lkst=0,xpsz=0,lvsz=0,lksz=0;
+    for(size_t i=0;i<n;++i){
+        uintptr_t s=pointer(begin+i*8);
+        if(!xps&&move_cpmc_valid(s,c,xp_tag,&xpp,&xpr,&xpst,&xpsz))xps=s;
+        else if(!lvs&&move_cpmc_valid(s,c,lv_tag,&lvp,&lvr,&lvst,&lvsz))lvs=s;
+        else if(!lks&&move_cpmc_valid(s,c,lk_tag,&lkp,&lkr,&lkst,&lksz))lks=s;
+        if(xps&&lvs&&lks)break;
+    }
+    if(!xps||!lvs||!lks||xpr!=lvr||xpr!=lkr||xpsz<(xpst+xpr)*4||lvsz<(lvst+(lvr+7)/8)*4||lksz<lkst*4+lkr)return 0;
+    if(!writable(xpp+(uintptr_t)xpst*4,(size_t)xpr*4)||!writable(lvp+(uintptr_t)lvst*4,(size_t)((lvr+7)/8)*4)||!writable(lkp+(uintptr_t)lkst*4,(size_t)lkr)||
+       !grade_write_access(pointer(xps+0x10)+0xe8)||!grade_write_access(pointer(lvs+0x10)+0xe8)||!grade_write_access(pointer(lks+0x10)+0xe8))return 0;
+    uint32_t upg=0;
+    const uint32_t *lv_base=(const uint32_t*)(lvp+(uintptr_t)lvst*4);
+    const unsigned char *lk_base=(const unsigned char*)(lkp+(uintptr_t)lkst*4);
+    for(uint32_t i=0;i<lvr;++i){
+        uint32_t lv=(lv_base[i/8]>>((i%8)*4))&0xFu;
+        unsigned char lk=lk_base[i];
+        if((lv>=1&&lv<5)||(lk>=1&&lk<5))++upg;
+    }
+    *xp_store=xps;*lv_store=lvs;*lk_store=lks;*xp_packed=xpp;*lv_packed=lvp;*lk_packed=lkp;*rows_out=xpr;*xp_start=xpst;*lv_start=lvst;*lk_start=lkst;*upgradable_out=upg;return 1;
+}
 static void process_user(uintptr_t root,int64_t user,int has_user){
     if(user!=-1||!TryAcquireSRWLockExclusive(&guard))return;
     CareerField fresh[2];uintptr_t c=0;
     if(!has_user||!resolve(root,fresh,&c)){
         if(!has_user)diagnose(CAREER_DIAG_NO_USER);
-        snapshot.ready=0;snapshot.fitness_ready=0;snapshot.training_ready=0;snapshot.longevity_ready=0;longevity_disable();if(snapshot.status==CAREER_PENDING)snapshot.status=CAREER_CHANGED;active_root=collection=0;ReleaseSRWLockExclusive(&guard);return;
+        snapshot.ready=0;snapshot.fitness_ready=0;snapshot.training_ready=0;snapshot.longevity_ready=0;snapshot.moves_ready=0;snapshot.moves_upgradable=0;longevity_disable();if(snapshot.status==CAREER_PENDING)snapshot.status=CAREER_CHANGED;active_root=collection=last_moves_collection=prev_move_xp_c=0;cached_moves_ready=cached_moves_upgradable=prev_move_xp_rows=0;next_moves_probe=0;ReleaseSRWLockExclusive(&guard);return;
     }
     CareerField long_field={0};uint32_t identity=0;int long_ready=describe(fresh[0].store,CAREER_LONGEVITY,&long_field)&&long_field.bits==17&&long_field.value<=10000&&fighter_identity(fresh[0].store,&identity);
     if(InterlockedCompareExchange(&longevity_on,0,0)&&(!long_ready||root!=active_root||c!=collection||!same(&longevity,&long_field)||identity!=longevity_identity))longevity_disable();
@@ -264,7 +425,68 @@ static void process_user(uintptr_t root,int64_t user,int has_user){
     CareerField camp={0};uint32_t ref=0,week=0;int camp_ready=describe_training(fresh[0].store,c,&camp,&ref,&week);
     GradePack grades[5];uint32_t grade_refs[5]={0};int grades_ready=grade_fields(c,grades,grade_refs);
     snapshot.sparring_grades_ready=grades_ready>0;snapshot.sparring_grades_completed=grades_ready>0?(uint32_t)(grades_ready-1):0;
-    if(snapshot.status==CAREER_PENDING&&snapshot.kind==CAREER_GRADES){
+    uintptr_t mv_xps=0,mv_lvs=0,mv_lks=0,mv_xpp=0,mv_lvp=0,mv_lkp=0;uint32_t mv_rows=0,mv_xpst=0,mv_lvst=0,mv_lkst=0,mv_upg=0,ms_upg=0;
+    int moves_pending=(snapshot.status==CAREER_PENDING&&snapshot.kind==CAREER_MOVES);
+    uint64_t now_ms=GetTickCount64();
+    int need_moves_scan=moves_pending||c!=last_moves_collection||now_ms>=next_moves_probe;
+    int moves_ready=(int)cached_moves_ready;
+    if(need_moves_scan||move_xp_multiplier>1){
+        moves_ready=move_arrays_find(fresh[0].store,fresh[1].store,c,&mv_xps,&mv_lvs,&mv_lks,&mv_xpp,&mv_lvp,&mv_lkp,&mv_rows,&mv_xpst,&mv_lvst,&mv_lkst,&mv_upg);
+        if(need_moves_scan){
+            if(moves_ready)moveset_upgrade(fresh[0].store,c,MOVE_GROUP_ALL,&ms_upg,0);
+            cached_moves_ready=(uint32_t)moves_ready;
+            cached_moves_upgradable=moves_ready?(mv_upg>ms_upg?mv_upg:ms_upg):0;
+            last_moves_collection=c;next_moves_probe=now_ms+2000;
+        }
+    }
+    snapshot.moves_ready=moves_ready;snapshot.moves_upgradable=cached_moves_upgradable;
+    snapshot.move_xp_multiplier=(uint32_t)move_xp_multiplier;
+    if(moves_ready&&!moves_pending&&move_xp_multiplier>1&&mv_rows<=1024){
+        volatile uint32_t *xp_base=(volatile uint32_t*)(mv_xpp+(uintptr_t)mv_xpst*4);
+        if(c!=prev_move_xp_c||mv_rows!=prev_move_xp_rows){
+            for(uint32_t i=0;i<mv_rows;++i){uint32_t raw=xp_base[i];prev_move_xp[i]=(raw&0x80000000u)?(raw&0x7fffffffu):0;}
+            prev_move_xp_c=c;prev_move_xp_rows=mv_rows;
+        }else{
+            int xp_dirty=0;
+            for(uint32_t i=0;i<mv_rows;++i){
+                uint32_t raw=xp_base[i];
+                if(!(raw&0x80000000u))continue;
+                uint32_t cur=raw&0x7fffffffu;
+                if(cur>prev_move_xp[i]){
+                    uint32_t delta=cur-prev_move_xp[i];
+                    uint64_t bonus=(uint64_t)delta*(uint32_t)(move_xp_multiplier-1);
+                    uint32_t target=(cur+bonus>1000000u)?1000000u:(uint32_t)(cur+bonus);
+                    xp_base[i]=0x80000000u|target;
+                    prev_move_xp[i]=target;xp_dirty=1;
+                }else prev_move_xp[i]=cur;
+            }
+            if(xp_dirty)dirty_safe(mv_xps);
+        }
+    }else if(move_xp_multiplier<=1){prev_move_xp_c=0;prev_move_xp_rows=0;}
+    if(moves_pending){
+        if(root!=active_root||c!=collection||!moves_ready||mv_rows!=expected_move_rows||GetTickCount64()-queued>30000)snapshot.status=CAREER_CHANGED;
+        else{
+            if(expected_move_group==MOVE_GROUP_ALL){
+                for(uint32_t i=0;i<mv_rows;++i){
+                    volatile uint32_t *lv_ptr=(volatile uint32_t*)(mv_lvp+((uintptr_t)mv_lvst+i/8)*4);
+                    volatile unsigned char *lk_ptr=(volatile unsigned char*)(mv_lkp+(uintptr_t)mv_lkst*4+i);
+                    uint32_t shift=(i%8)*4,lv=(*lv_ptr>>shift)&0xFu;
+                    unsigned char lk=*lk_ptr;
+                    if((lv>=1&&lv<5)||(lk>=1&&lk<5)){
+                        if(lv>=1&&lv<5)*lv_ptr=(*lv_ptr&~(0xFu<<shift))|(5u<<shift);
+                        if(lk>=1&&lk<5)*lk_ptr=5;
+                        volatile uint32_t *xp_ptr=(volatile uint32_t*)(mv_xpp+((uintptr_t)mv_xpst+i)*4);
+                        uint32_t raw=*xp_ptr,cur=(raw&0x80000000u)?(raw&0x7fffffffu):0;
+                        if(cur<60000u)*xp_ptr=0x80000000u|60000u;
+                    }
+                }
+                dirty_safe(mv_xps);dirty_safe(mv_lvs);dirty_safe(mv_lks);
+            }
+            moveset_upgrade(fresh[0].store,c,expected_move_group,&ms_upg,1);
+            cached_moves_upgradable=0;next_moves_probe=GetTickCount64()+250;prev_move_xp_c=0;
+            snapshot.moves_upgradable=0;snapshot.status=CAREER_ADDED;
+        }
+    }else if(snapshot.status==CAREER_PENDING&&snapshot.kind==CAREER_GRADES){
         if(root!=active_root||c!=collection||!grades_ready||memcmp(grade_refs,expected_grade_ids,sizeof(grade_refs))||GetTickCount64()-queued>30000)snapshot.status=CAREER_CHANGED;
         else{
             snapshot.status=CAREER_ADDED;
@@ -317,7 +539,7 @@ static void *__attribute__((sysv_abi)) hooked_user(uintptr_t *out,uintptr_t root
 #endif
     uintptr_t selected=0;rd((uintptr_t)out,&selected,8);process_user(root,user,selected!=0);return value;
 }
-void career_cheats_init(uintptr_t base){guest=base;memset(&snapshot,0,sizeof(snapshot));InterlockedExchange64(&next_probe,0);diagnose(CAREER_DIAG_CODE_WAIT);InterlockedExchange(&diagnostic_hooks,0);InterlockedExchange(&diagnostic_probes,0);longevity_disable();InterlockedExchange(&longevity_wanted,0);cache_collection=cache_begin=0;cached_slot[0]=cached_slot[1]=SIZE_MAX;}
+void career_cheats_init(uintptr_t base){guest=base;memset(&snapshot,0,sizeof(snapshot));InterlockedExchange64(&next_probe,0);diagnose(CAREER_DIAG_CODE_WAIT);InterlockedExchange(&diagnostic_hooks,0);InterlockedExchange(&diagnostic_probes,0);longevity_disable();InterlockedExchange(&longevity_wanted,0);cache_collection=cache_begin=last_moves_collection=prev_move_xp_c=0;cached_slot[0]=cached_slot[1]=SIZE_MAX;cached_moves_ready=cached_moves_upgradable=prev_move_xp_rows=0;next_moves_probe=0;move_xp_multiplier=1;snapshot.move_xp_multiplier=1;}
 void career_cheats_tick(void){
     if(!original_user){
         unsigned char bytes[sizeof(user_signature)];
@@ -347,7 +569,7 @@ void career_cheats_tick(void){
     if(snapshot.status==CAREER_PENDING&&GetTickCount64()-queued>30000)snapshot.status=CAREER_CHANGED;
     ReleaseSRWLockExclusive(&guard);
 }
-void career_cheats_cancel(void){AcquireSRWLockExclusive(&guard);InterlockedExchange(&longevity_wanted,0);snapshot.longevity_requested=0;longevity_disable();reward_multiplier=1;reward_restore();snapshot.training_multiplier=1;if(snapshot.status==CAREER_PENDING)snapshot.status=CAREER_CHANGED;ReleaseSRWLockExclusive(&guard);}
+void career_cheats_cancel(void){AcquireSRWLockExclusive(&guard);InterlockedExchange(&longevity_wanted,0);snapshot.longevity_requested=0;longevity_disable();reward_multiplier=1;reward_restore();snapshot.training_multiplier=1;move_xp_multiplier=1;snapshot.move_xp_multiplier=1;prev_move_xp_c=0;prev_move_xp_rows=0;if(snapshot.status==CAREER_PENDING)snapshot.status=CAREER_CHANGED;ReleaseSRWLockExclusive(&guard);}
 void career_cheats_snapshot(CareerSnapshot *out){AcquireSRWLockShared(&guard);*out=snapshot;out->longevity_blocked=(uint32_t)InterlockedCompareExchange(&longevity_blocked,0,0);ReleaseSRWLockShared(&guard);}
 void career_cheats_diagnostics(CareerDiagnostics *out){out->reason=InterlockedCompareExchange(&diagnostic_reason,0,0);out->hooks=InterlockedCompareExchange(&diagnostic_hooks,0,0);out->probes=(uint32_t)InterlockedCompareExchange(&diagnostic_probes,0,0);}
 const char *career_cheats_diagnostic_name(int reason){
@@ -407,6 +629,11 @@ int career_cheats_training_multiplier(int value){
     if(snapshot.ready)training_rewards_refresh(collection);else if(value==1)reward_restore();
     ReleaseSRWLockExclusive(&guard);return 1;
 }
+int career_cheats_move_xp_multiplier(int value){
+    if(value!=1&&value!=2&&value!=5&&value!=10)return 0;
+    AcquireSRWLockExclusive(&guard);move_xp_multiplier=value;snapshot.move_xp_multiplier=(uint32_t)value;prev_move_xp_c=0;prev_move_xp_rows=0;
+    ReleaseSRWLockExclusive(&guard);return 1;
+}
 int career_cheats_grade_a(void){
     AcquireSRWLockExclusive(&guard);GradePack fields_now[5];uint32_t refs[5]={0};int ok=0;
     if(snapshot.ready&&snapshot.status!=CAREER_PENDING&&grade_fields(collection,fields_now,refs)>1){
@@ -414,3 +641,13 @@ int career_cheats_grade_a(void){
     }
     ReleaseSRWLockExclusive(&guard);return ok;
 }
+int career_cheats_max_moves_group(int group){
+    if(group<0||group>=MOVE_GROUP_COUNT)group=MOVE_GROUP_ALL;
+    AcquireSRWLockExclusive(&guard);uintptr_t xps=0,lvs=0,lks=0,xpp=0,lvp=0,lkp=0;uint32_t rows=0,xpst=0,lvst=0,lkst=0,upg=0,ms_upg=0;int ok=0;
+    if(snapshot.ready&&snapshot.status!=CAREER_PENDING&&move_arrays_find(fields[0].store,fields[1].store,collection,&xps,&lvs,&lks,&xpp,&lvp,&lkp,&rows,&xpst,&lvst,&lkst,&upg)){
+        moveset_upgrade(fields[0].store,collection,group,&ms_upg,0);
+        if((group==MOVE_GROUP_ALL&&upg>0)||ms_upg>0){expected_move_rows=rows;expected_move_group=group;snapshot.kind=CAREER_MOVES;snapshot.amount=ms_upg?ms_upg:upg;queued=GetTickCount64();snapshot.status=CAREER_PENDING;InterlockedExchange64(&next_probe,0);ok=1;}
+    }
+    ReleaseSRWLockExclusive(&guard);return ok;
+}
+int career_cheats_max_moves(void){return career_cheats_max_moves_group(MOVE_GROUP_ALL);}

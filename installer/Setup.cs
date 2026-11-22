@@ -195,7 +195,7 @@ namespace UFC6OverlaySetup {
             foreach (var process in Process.GetProcesses()) using (process) {
                 string name;
                 try { name = process.ProcessName; } catch { continue; }
-                if (!string.Equals(name,"UFC 6",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"UFC 6 novo",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"UFC 6 Parsec",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"UFC6",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"kyty_emulator",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"kyty_launcher",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"ufc6_menu_restart",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"ufc6_menu_icons",StringComparison.OrdinalIgnoreCase)) continue;
+                if (!string.Equals(name,"UFC 6",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"UFC 6 novo",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"UFC 6 Parsec",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"UFC6",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"kyty_emulator",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"kyty_launcher",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"ufc6_menu_restart",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"ufc6_menu_icons",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"ufc6_menu_config",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"ufc6_menu_update",StringComparison.OrdinalIgnoreCase)) continue;
                 try {
                     string path = process.MainModule.FileName;
                     if (string.Equals(Path.GetDirectoryName(path),folder,StringComparison.OrdinalIgnoreCase) || string.Equals(path,Path.Combine(Directory.GetParent(folder).FullName,"UFC6.exe"),StringComparison.OrdinalIgnoreCase))
@@ -297,6 +297,7 @@ namespace UFC6OverlaySetup {
                 throw;
             } finally { foreach (string path in staged.Values) { try { if (File.Exists(path)) File.Delete(path); } catch { } } }
             if (remove) foreach (string path in backups.Values) { try { File.Delete(path); } catch { /* The mod is removed; leave any locked backup in place. */ } }
+            try { string legacy = Path.Combine(folder, "ufc6_menu_update.exe"); if (File.Exists(legacy) && !Linked(legacy)) File.Delete(legacy); } catch { }
             try {
                 string manifest = Path.Combine(folder,"ufc6_menu_layer.json");
                 bool hklmOk = false;

@@ -7,7 +7,7 @@ also includes cumulative round records and judges' scores. The file marks
 whether those round details were available. It does not submit the result or
 change Elo. Both lobby fighters still need to report the result.
 
-On a finished fight's **Fight Statistics** screen, open **F10 → Parsectagon → Export fight report**. The overlay scans the game's read-only records in a separate helper process, then saves a JSON file in `Documents/UFC 6 Parsectagon Overlay/Fight Reports` and shows whether complete or overall-only data was saved. Older reports in `Documents/Parsectagon/Fight Reports` remain available. Sign in on the Parsectagon website, open the correct match in **My fighter**, and choose **Attach game capture JSON**.
+On a finished fight's **Fight Statistics** screen, open **F10 → Parsectagon → Export fight report**. The overlay scans the game's read-only records in a separate helper process, then saves a JSON file in `Documents/UFC Parsectagon Overlay/UFC6/Fight Reports` and shows whether complete or overall-only data was saved. Reports from the older shared folders migrate automatically and remain available through fallback reads. Sign in on the Parsectagon website, open the correct match in **My fighter**, and choose **Attach game capture JSON**.
 
 The export only reads game data and writes a local file. It does not submit a result or award ranked points; both players still report the match. Fighter names and game IDs are included when the matching fighter-profile response remains available; they do not identify Parsectagon accounts. The Parsectagon source validator accepts the schema-1 result and retains the extra `fightStatistics` field; a running server must be restarted to load that change.
 

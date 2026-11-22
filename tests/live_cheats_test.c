@@ -16,6 +16,32 @@ static void __attribute__((sysv_abi)) model_sync(void *binder,unsigned first,uns
 }
 static void frame(LiveCheats *s,BindingSyncFn sync,void *binder){sync(binder,0,3);live_cheats_tick(s);}
 int main(void){
+    unsigned char *clock_slab=VirtualAlloc(NULL,0x200000,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE);assert(clock_slab);
+    unsigned char *clock_anchor=clock_slab+0x100000,*clock_object=clock_slab+0x80000,*clock_buffer=clock_slab+0x60000;
+    unsigned char *elapsed_object=clock_slab+0x90000,*elapsed_buffer=clock_slab+0x70000;
+    char clock_name[]="Training_TimeRemaining",elapsed_name[]="Timer_Training_Countdown_Elapsed";uintptr_t clock_vtable=0x909c227f0ULL,clock_world=0x123456789ULL;
+    memcpy(clock_anchor,&clock_vtable,8);memcpy(clock_anchor+0x28,&clock_world,8);
+    memcpy(clock_object,&clock_vtable,8);ptr(clock_object,8,clock_name);memcpy(clock_object+0x28,&clock_world,8);
+    integer(clock_object,0x58,4);ptr(clock_object,0x60,clock_buffer);integer(clock_buffer,0x1c,32);
+    float clock_remaining=120.f;memcpy(clock_buffer+0x20,&clock_remaining,4);
+    memcpy(elapsed_object,&clock_vtable,8);ptr(elapsed_object,8,elapsed_name);memcpy(elapsed_object+0x28,&clock_world,8);
+    integer(elapsed_object,0x58,4);ptr(elapsed_object,0x60,elapsed_buffer);integer(elapsed_buffer,0x1c,32);
+    float clock_elapsed=30.f;memcpy(elapsed_buffer+0x20,&clock_elapsed,4);
+    uintptr_t found_object=0,clock_value=sparring_clock_find_near((uintptr_t)clock_anchor,&found_object);
+    assert(clock_value==(uintptr_t)clock_buffer+0x20&&found_object==(uintptr_t)clock_object&&sparring_clock_valid(found_object,clock_value));
+    uintptr_t found_elapsed_object=0,elapsed_value=sparring_clock_find_named_near((uintptr_t)clock_anchor,"Timer_Training_Countdown_Elapsed",32,&found_elapsed_object);
+    assert(elapsed_value==(uintptr_t)elapsed_buffer+0x20&&found_elapsed_object==(uintptr_t)elapsed_object&&sparring_clock_valid_named(found_elapsed_object,elapsed_value,"Timer_Training_Countdown_Elapsed",32));
+    InterlockedExchange64(&sparring_clock_obj,(LONG64)found_object);InterlockedExchange64(&sparring_clock_value,(LONG64)clock_value);
+    InterlockedExchange64(&sparring_elapsed_obj,(LONG64)found_elapsed_object);InterlockedExchange64(&sparring_elapsed_value,(LONG64)elapsed_value);
+    live_cheats_sparring_clock_toggle();assert(live_cheats_sparring_clock_get());sparring_clock_step();
+    clock_remaining=119.f;memcpy(clock_buffer+0x20,&clock_remaining,4);sparring_clock_step();memcpy(&clock_remaining,clock_buffer+0x20,4);assert(clock_remaining==120.f);
+    clock_elapsed=31.f;memcpy(elapsed_buffer+0x20,&clock_elapsed,4);sparring_clock_step();memcpy(&clock_elapsed,elapsed_buffer+0x20,4);assert(clock_elapsed==30.f);
+    LONG round_elapsed=19,round_remaining=160;sparring_round_elapsed_saved=19;sparring_round_remaining_saved=160;
+    round_elapsed=20;round_remaining=159;sparring_clock_hold_integer((uintptr_t)&round_elapsed,&sparring_round_elapsed_saved,1);sparring_clock_hold_integer((uintptr_t)&round_remaining,&sparring_round_remaining_saved,0);
+    assert(round_elapsed==19&&round_remaining==160);
+    clock_remaining=180.f;memcpy(clock_buffer+0x20,&clock_remaining,4);sparring_clock_step();clock_remaining=179.f;memcpy(clock_buffer+0x20,&clock_remaining,4);sparring_clock_step();memcpy(&clock_remaining,clock_buffer+0x20,4);assert(clock_remaining==180.f);
+    live_cheats_sparring_clock_toggle();assert(!live_cheats_sparring_clock_get());clock_remaining=178.f;memcpy(clock_buffer+0x20,&clock_remaining,4);sparring_clock_step();memcpy(&clock_remaining,clock_buffer+0x20,4);assert(clock_remaining==178.f);
+    VirtualFree(clock_slab,0,MEM_RELEASE);InterlockedExchange64(&sparring_clock_obj,0);InterlockedExchange64(&sparring_clock_value,0);InterlockedExchange64(&sparring_elapsed_obj,0);InterlockedExchange64(&sparring_elapsed_value,0);
     unsigned char *base=VirtualAlloc(NULL,0xc000000,MEM_RESERVE,PAGE_NOACCESS);assert(base);const Profile *p=&profiles[1];
     LiveCheats pending;live_cheats_init(&pending,(uintptr_t)base);
     assert(live_cheats_toggle(&pending,0)&&pending.flags[0].requested&&pending.flags[0].status==LIVE_WAIT);
@@ -58,6 +84,6 @@ int main(void){
     cheat_bindings_apply(&cache,(uintptr_t)binder,0,3,command,&result);unsigned known[2],enabled[2];cheat_bindings_observe(&result,known,enabled);assert((result.failed[0]&2)&&!(known[0]&1)&&!*readonly);ptr(nodes[0],16,&fields[0][2]);VirtualFree(readonly,0,MEM_RELEASE);
     memcpy(base+p->hook[0],p->on[0],32);live_cheats_tick(&s);assert(s.flags[0].status==LIVE_LAUNCHER&&!live_cheats_toggle(&s,0));assert(!live_cheats_toggle(&s,2));
     for(int i=0;i<2;++i)for(int j=0;j<2;++j)assert(fields[i][j*2+1]==0xa5);
-    puts("PASS: real SysV binding hook; P1 controller mapped to either fighter, two-pad reassignment and opponent clearing; no ambiguous guessing; bidirectional Off regression, relocated tables, invalid nodes and failed writes; only fixture memory changed.");
+    puts("PASS: verified named-field sparring clock hold/reset/Off; real SysV binding hook; P1 controller mapped to either fighter, two-pad reassignment and opponent clearing; no ambiguous guessing; bidirectional Off regression, relocated tables, invalid nodes and failed writes; only fixture memory changed.");
     return 0;
 }

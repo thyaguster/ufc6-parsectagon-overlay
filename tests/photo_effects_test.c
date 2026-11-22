@@ -32,7 +32,7 @@ int main(void){
  pad=PAD_B;assert(!photo_panel_controls(&s,&pad,0)&&s.photo_panel_page==0&&!(pad&PAD_B));pad=PAD_B;assert(!photo_panel_controls(&s,&pad,0)&&(pad&PAD_B));
  s.photo_help_hidden=1;s.photo_panel_page=2;pad=PAD_RIGHT;before=s.effects.preset;assert(!photo_panel_controls(&s,&pad,0)&&s.effects.preset==before);pad=0;assert(!photo_panel_controls(&s,&pad,PHOTO_PANEL_PAGE_KEY)&&!s.photo_help_hidden&&s.photo_panel_page==1);
  s.photo_mark_row=MARK_COLOR;pad=0;s.photo_panel_page=2;assert(photo_panel_controls(&s,&pad,PHOTO_PANEL_RIGHT_KEY)&&s.effects.mark_color==1);assert(photo_mark_rgb(&s.effects)==0x141820);
- s=(MenuState){.visible=1,.armed=1,.page=PAGE_TOOLS,.selection=1};assert(!s.screenshot_include_ui&&menu_rows(&s)==6);assert(menu_button(&s,PAD_A,1)==MENU_SCREENSHOT_UI_CHANGED&&s.screenshot_include_ui);menu_tick(&s,0,20,1);assert(menu_button(&s,PAD_LEFT,1)==MENU_SCREENSHOT_UI_CHANGED&&!s.screenshot_include_ui);
+ s=(MenuState){.visible=1,.armed=1,.page=PAGE_TOOLS,.selection=1};assert(!s.screenshot_include_ui&&menu_rows(&s)==9);assert(menu_button(&s,PAD_A,1)==MENU_SCREENSHOT_UI_CHANGED&&s.screenshot_include_ui);menu_tick(&s,0,20,1);assert(menu_button(&s,PAD_LEFT,1)==MENU_SCREENSHOT_UI_CHANGED&&!s.screenshot_include_ui);
  s=(MenuState){.replay_ready=1,.photo_panel_page=2};pad=PAD_MENU;assert(!photo_panel_controls(&s,&pad,0)&&s.photo_panel_page==3);
  pad=PAD_A;assert(photo_panel_controls(&s,&pad,0)==PHOTO_PANEL_REPLAY_TOGGLE&&!pad);
  pad=PAD_DOWN;assert(!photo_panel_controls(&s,&pad,0)&&s.photo_replay_row==1);pad=PAD_LEFT;assert(photo_panel_controls(&s,&pad,0)==PHOTO_PANEL_REPLAY_BACK&&!pad);

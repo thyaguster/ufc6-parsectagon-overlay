@@ -190,8 +190,9 @@ def main():
     if before != after:
         raise RuntimeError("Fight data changed during capture. Try again.")
     report = build_report(after[1], engine, args)
-    destination = args.output or (Path.home() / "Documents" / "UFC 6 Parsectagon Overlay" /
-                                  "Fight Reports" / f"fight-{time.strftime('%Y%m%d-%H%M%S')}-{report['id'][:8]}.json")
+    destination = args.output or (Path.home() / "Documents" / "UFC Parsectagon Overlay" /
+                                  "UFC6" / "Fight Reports" /
+                                  f"fight-{time.strftime('%Y%m%d-%H%M%S')}-{report['id'][:8]}.json")
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(destination)

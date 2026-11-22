@@ -27,7 +27,7 @@ enum { MENU_NONE, MENU_OPEN, MENU_RESUME, MENU_QUIT, MENU_CHANGED,
 enum { TOPBAR_FAVORITES, TOPBAR_ACTIONS, TOPBAR_LOBBY, TOPBAR_CHEATS, TOPBAR_PHOTO, TOPBAR_SETTINGS, TOPBAR_COUNT };
 
 enum { MENU_LOBBY_FILTER_CHANGED=MENU_LOBBY_REFRESH+1, MENU_FIGHT_EXPORT, MENU_GAME_ICONS_EDIT, MENU_LOBBY_LINK, MENU_LOBBY_UNLINK, MENU_STREAM_PRESET_APPLY, MENU_HOST_ROOM_PUBLISH };
-enum { MENU_REPLACE_ONLINE_CHANGED=MENU_HOST_ROOM_PUBLISH+1, MENU_FIGHT_REPORT_OPEN, MENU_FIGHT_REPORT_RETRY, MENU_FIGHT_REPORT_REFRESH, MENU_FAVORITES_CHANGED, MENU_FAVORITES_FIRST_CHANGED, MENU_OPEN_PARSECTAGON, MENU_OPEN_DISCORD, MENU_OPEN_GITHUB, MENU_FPV_CAMERA_CHANGED, MENU_FPV_TUNE_CHANGED, MENU_SPARRING_CLOCK };
+enum { MENU_REPLACE_ONLINE_CHANGED=MENU_HOST_ROOM_PUBLISH+1, MENU_FIGHT_REPORT_OPEN, MENU_FIGHT_REPORT_RETRY, MENU_FIGHT_REPORT_REFRESH, MENU_FAVORITES_CHANGED, MENU_FAVORITES_FIRST_CHANGED, MENU_OPEN_PARSECTAGON, MENU_OPEN_DISCORD, MENU_OPEN_GITHUB, MENU_FPV_CAMERA_CHANGED, MENU_FPV_TUNE_CHANGED, MENU_SPARRING_CLOCK, MENU_MOVE_XP_MULTIPLIER };
 
 typedef struct {
     int visible,selection,armed,chord_latched,draining;
@@ -52,7 +52,7 @@ typedef struct {
     int disable_guide;
     int gamebar_shortcut;
     int first_player_only;
-    int career_amount_index[2],career_kind,game_icons_style,game_icons_from_overlay_change,game_icons_return_page,game_icons_return_selection,training_multiplier_index,startup_patch_enable;
+    int career_amount_index[2],career_kind,move_group_index,game_icons_style,game_icons_from_overlay_change,game_icons_return_page,game_icons_return_selection,training_multiplier_index,move_xp_multiplier_index,startup_patch_enable;
     int binding_action,key_capturing,capture_target,theme_selection,font_index,box_style,window_size,settings_legacy,layout_style,backdrop_style,master_preset,topbar_tab;uint32_t assigned_chord;
     int favorites[MENU_MAX_FAVORITES],favorite_count,open_favorites_first,fav_search_category,fav_search_mode,fav_carousel_index,fpv_mode,fpv_pitch_deg,fpv_height_offset_cm,fpv_fwd_offset_cm,fpv_fov_deg,fpv_grapple_cm;
     char fav_search_query[32];
@@ -83,7 +83,8 @@ static uint32_t menu_career_amount(const MenuState *s,int kind){
     int i=s->career_amount_index[kind];return kind==0?money[i>=0&&i<5?i:0]:points[i>=0&&i<9?i:0];
 }
 static int menu_training_multiplier(const MenuState *s){static const int values[]={1,2,5,10};return values[s->training_multiplier_index>=0&&s->training_multiplier_index<4?s->training_multiplier_index:0];}
-static int menu_career_row(int kind){return kind==5?9:3+kind;}
+static int menu_move_xp_multiplier(const MenuState *s){static const int values[]={1,2,5,10};return values[s->move_xp_multiplier_index>=0&&s->move_xp_multiplier_index<4?s->move_xp_multiplier_index:0];}
+static int menu_career_row(int kind){return kind==6?10:kind==5?9:3+kind;}
 static int menu_setting_page(int page){return page==PAGE_SETTINGS||page==PAGE_APPEARANCE||page==PAGE_CONTROLS||page==PAGE_GAME_SETTINGS||page==PAGE_TOOLS||page==PAGE_EXPERIMENTAL;}
 static int menu_modern_settings_page(const MenuState *s){return s->layout_style!=LAYOUT_CLASSIC&&(s->page==PAGE_SETTINGS||s->page==PAGE_SETTINGS_HOME||s->page==PAGE_APPEARANCE||s->page==PAGE_CONTROLS||s->page==PAGE_GAME_SETTINGS||s->page==PAGE_TOOLS||s->page==PAGE_EXPERIMENTAL||s->page==PAGE_THEME||s->page==PAGE_KEYBINDS||s->page==PAGE_BINDING||s->page==PAGE_GAME_ICONS||s->page==PAGE_STARTUP||s->page==PAGE_PERFORMANCE||s->page==PAGE_CHEATS||s->page==PAGE_BACKUPS||s->page==PAGE_PHOTO||s->page==PAGE_PHOTO_CONTROLS||s->page==PAGE_PHOTO_EFFECTS||s->page==PAGE_PHOTO_WATERMARK||s->page==PAGE_FAVORITE_SEARCH);}
 static int menu_modern_dialog_page(const MenuState *s){return s->layout_style!=LAYOUT_CLASSIC&&(s->page==PAGE_RESTART||s->page==PAGE_SHUTDOWN||s->page==PAGE_REBOOT||s->page==PAGE_SCREENSHOT||s->page==PAGE_RESET||s->page==PAGE_CAREER_ADD||s->page==PAGE_GAME_ICONS_CONFIRM||s->page==PAGE_PERFORMANCE_RESTART||s->page==PAGE_PERFORMANCE_DISCARD||s->page==PAGE_STARTUP_CONFIRM||s->page==PAGE_QUIT||s->page==PAGE_AVATAR_REPAIR||s->page==PAGE_AVATAR_ALWAYS||s->page==PAGE_LOBBY_ACCOUNT);}
@@ -202,7 +203,7 @@ static int menu_scroll_page(int page){return page==PAGE_LOBBY||page==PAGE_STARTU
 static int menu_rows(const MenuState *s) {
     if(s->page==PAGE_MAIN&&s->layout_style!=LAYOUT_CLASSIC)return topbar_tab_rows_for(s);
     if(s->page==PAGE_FAVORITE_SEARCH){int ids[FAV_CATALOG_COUNT];return 3+fav_filter_items(s->fav_search_category,s->fav_search_query,ids,FAV_CATALOG_COUNT);}
-    return s->page==PAGE_FIGHT_REPORT?4:s->page==PAGE_LOBBY_HOME?8:s->page==PAGE_STREAM_PRESETS?5:s->page==PAGE_HOST_FIGHT?7:s->page==PAGE_LOBBY?8+s->lobby_room_count:s->page==PAGE_LOBBY_ACCOUNT?3:s->page==PAGE_WELCOME?1:s->page==PAGE_STARTUP?3:s->page==PAGE_STARTUP_CONFIRM||s->page==PAGE_AVATAR_REPAIR||s->page==PAGE_AVATAR_ALWAYS?2:s->page==PAGE_PERFORMANCE?PERF_ROWS:s->page==PAGE_PERFORMANCE_RESTART||s->page==PAGE_PERFORMANCE_DISCARD?2:s->page==PAGE_PHOTO_EFFECTS?FX_ROWS:s->page==PAGE_PHOTO_WATERMARK?MARK_ROWS:s->page==PAGE_PHOTO?12:s->page==PAGE_PHOTO_CONTROLS?12:s->page==PAGE_SETTINGS_HOME?7:s->page==PAGE_APPEARANCE?11:s->page==PAGE_CONTROLS?5:s->page==PAGE_GAME_SETTINGS?12:s->page==PAGE_TOOLS?9:s->page==PAGE_EXPERIMENTAL?4:s->page==PAGE_KEYBINDS?(BIND_COUNT+1):s->page==PAGE_BINDING?5:s->page==PAGE_THEME?7:s->page==PAGE_MAIN?MAIN_COUNT:s->page==PAGE_SETTINGS?SETTING_COUNT:s->page==PAGE_CHEATS?12:s->page==PAGE_BACKUPS?3:s->page==PAGE_GAME_ICONS?5:s->shutdown_countdown?1:2;
+    return s->page==PAGE_FIGHT_REPORT?4:s->page==PAGE_LOBBY_HOME?8:s->page==PAGE_STREAM_PRESETS?5:s->page==PAGE_HOST_FIGHT?7:s->page==PAGE_LOBBY?8+s->lobby_room_count:s->page==PAGE_LOBBY_ACCOUNT?3:s->page==PAGE_WELCOME?1:s->page==PAGE_STARTUP?3:s->page==PAGE_STARTUP_CONFIRM||s->page==PAGE_AVATAR_REPAIR||s->page==PAGE_AVATAR_ALWAYS?2:s->page==PAGE_PERFORMANCE?PERF_ROWS:s->page==PAGE_PERFORMANCE_RESTART||s->page==PAGE_PERFORMANCE_DISCARD?2:s->page==PAGE_PHOTO_EFFECTS?FX_ROWS:s->page==PAGE_PHOTO_WATERMARK?MARK_ROWS:s->page==PAGE_PHOTO?12:s->page==PAGE_PHOTO_CONTROLS?12:s->page==PAGE_SETTINGS_HOME?7:s->page==PAGE_APPEARANCE?11:s->page==PAGE_CONTROLS?5:s->page==PAGE_GAME_SETTINGS?12:s->page==PAGE_TOOLS?9:s->page==PAGE_EXPERIMENTAL?4:s->page==PAGE_KEYBINDS?(BIND_COUNT+1):s->page==PAGE_BINDING?5:s->page==PAGE_THEME?7:s->page==PAGE_MAIN?MAIN_COUNT:s->page==PAGE_SETTINGS?SETTING_COUNT:s->page==PAGE_CHEATS?14:s->page==PAGE_BACKUPS?3:s->page==PAGE_GAME_ICONS?5:s->shutdown_countdown?1:2;
 }
 static int lobby_grid_columns(const MenuState *s){return s->online_takeover&&s->lobby_columns>=3?s->lobby_columns:2;}
 static int lobby_columns_for_viewport(uint32_t width){return width>=2200?4:width>=1700?3:2;}
@@ -378,7 +379,7 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
         if(s->page==PAGE_FAVORITE_SEARCH){s->page=PAGE_MAIN;if(s->layout_style!=LAYOUT_CLASSIC){s->topbar_tab=TOPBAR_FAVORITES;s->selection=0;}else s->selection=MAIN_RESUME;s->armed=0;return MENU_CHANGED;}
         if(s->page==PAGE_FIGHT_REPORT){s->page=PAGE_MAIN;if(s->layout_style!=LAYOUT_CLASSIC){s->topbar_tab=TOPBAR_ACTIONS;s->selection=4;}else s->selection=MAIN_RESUME;s->armed=0;return MENU_CHANGED;}
         if(s->page==PAGE_QUIT){s->page=PAGE_MAIN;s->selection=MAIN_QUIT;if(s->layout_style!=LAYOUT_CLASSIC){s->topbar_tab=TOPBAR_ACTIONS;s->selection=3;}s->armed=0;return MENU_CHANGED;}
-        if(s->page==PAGE_BACKUPS){s->page=PAGE_CHEATS;s->selection=10;s->armed=0;return MENU_CHANGED;}
+        if(s->page==PAGE_BACKUPS){s->page=PAGE_CHEATS;s->selection=12;s->armed=0;return MENU_CHANGED;}
         if(s->page==PAGE_GAME_ICONS_CONFIRM){int from_overlay=s->game_icons_from_overlay_change;s->page=from_overlay?s->game_icons_return_page:PAGE_GAME_ICONS;s->selection=from_overlay?s->game_icons_return_selection:s->game_icons_style;s->game_icons_from_overlay_change=0;s->armed=0;return MENU_CHANGED;}
         if(s->page==PAGE_GAME_ICONS){menu_return_setting(s,SETTING_GAME_ICONS);return MENU_CHANGED;}
         if(s->page==PAGE_CAREER_ADD){s->page=PAGE_CHEATS;s->selection=menu_career_row(s->career_kind);s->armed=0;return MENU_CHANGED;}
@@ -646,7 +647,7 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
         s->armed=0;
         if(s->selection==0)return MENU_BACKUP_CREATE;
         if(s->selection==1)return MENU_BACKUP_FOLDER;
-        s->page=PAGE_CHEATS;s->selection=10;return MENU_CHANGED;
+        s->page=PAGE_CHEATS;s->selection=12;return MENU_CHANGED;
     }
     if(s->page==PAGE_STARTUP){
         if(button!=PAD_A)return MENU_NONE;
@@ -702,8 +703,11 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
         if(s->selection==7&&(button==PAD_A||button==PAD_LEFT||button==PAD_RIGHT)){s->armed=0;return MENU_CAREER_LONGEVITY;}
         if(s->selection==8&&(button==PAD_A||button==PAD_LEFT||button==PAD_RIGHT)){s->training_multiplier_index=(s->training_multiplier_index+(button==PAD_LEFT?3:1))%4;return MENU_TRAINING_MULTIPLIER;}
         if(s->selection==9&&button==PAD_A){s->career_kind=5;s->page=PAGE_CAREER_ADD;s->selection=0;s->armed=0;return MENU_CHANGED;}
-        if(s->selection==10&&button==PAD_A){s->page=PAGE_BACKUPS;s->selection=0;s->armed=0;return MENU_BACKUP_OPEN;}
-        if(s->selection==11&&button==PAD_A){s->page=PAGE_MAIN;s->selection=MAIN_CHEATS;s->armed=0;return MENU_CHANGED;}
+        if(s->selection==10&&(button==PAD_LEFT||button==PAD_RIGHT)){s->move_group_index=(s->move_group_index+(button==PAD_LEFT?7:1))%8;return MENU_CHANGED;}
+        if(s->selection==10&&button==PAD_A){s->career_kind=6;s->page=PAGE_CAREER_ADD;s->selection=0;s->armed=0;return MENU_CHANGED;}
+        if(s->selection==11&&(button==PAD_A||button==PAD_LEFT||button==PAD_RIGHT)){s->move_xp_multiplier_index=(s->move_xp_multiplier_index+(button==PAD_LEFT?3:1))%4;return MENU_MOVE_XP_MULTIPLIER;}
+        if(s->selection==12&&button==PAD_A){s->page=PAGE_BACKUPS;s->selection=0;s->armed=0;return MENU_BACKUP_OPEN;}
+        if(s->selection==13&&button==PAD_A){s->page=PAGE_MAIN;s->selection=MAIN_CHEATS;s->armed=0;return MENU_CHANGED;}
         return MENU_NONE;
     }
     if(s->page==PAGE_SETTINGS) {

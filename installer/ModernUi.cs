@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: GPL-2.0-only
 using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -50,7 +50,7 @@ namespace UFC6OverlaySetup {
    if(!Enabled){fill=Color.FromArgb(26,37,49);text=Color.FromArgb(100,119,137);border=Color.FromArgb(36,51,66);}
    if(Focused&&ShowFocusCues)border=ModernUi.Accent;
    using(var p=ModernUi.Rounded(new RectangleF(.75f,.75f,Width-1.5f,Height-1.5f),9))using(var b=new SolidBrush(fill))using(var pen=new Pen(border,1.3f)){e.Graphics.FillPath(b,p);e.Graphics.DrawPath(pen,p);}
-   TextRenderer.DrawText(e.Graphics,Text,Font,ClientRectangle,text,TextFormatFlags.HorizontalCenter|TextFormatFlags.VerticalCenter|TextFormatFlags.SingleLine|TextFormatFlags.EndEllipsis);
+   TextRenderer.DrawText(e.Graphics,Text,Font,ClientRectangle,text,TextFormatFlags.HorizontalCenter|TextFormatFlags.VerticalCenter|TextFormatFlags.SingleLine|TextFormatFlags.EndEllipsis|TextFormatFlags.NoPrefix);
   }
  }
  public class ModernForm:Form {

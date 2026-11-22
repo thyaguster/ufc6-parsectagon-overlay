@@ -42,20 +42,29 @@ static unsigned fpv_prev_mode;
 static unsigned char fpv_saved_flags[3];
 static float fpv_saved_pose[16],fpv_saved_fov;
 static float fpv_pitch_deg,fpv_height_m,fpv_fwd_m,fpv_grapple_dist=0.65f;
-static int fpv_fov_deg=90;
+static int fpv_fov_deg=90,fpv_wobble=0;
 static int fpv_cfg_loaded;
-static ULONGLONG fpv_key_tick;
+static ULONGLONG fpv_key_tick,fpv_cfg_tick;
 static void fpv_cfg_load(void){
- if(fpv_cfg_loaded)return;
+ ULONGLONG now=PHOTO_NOW();
+ if(fpv_cfg_loaded&&now-fpv_cfg_tick<1000)return;
  fpv_cfg_loaded=1;
+ fpv_cfg_tick=now;
  FILE *f=fopen("ufc6_fpv.ini","r");
- if(f){(void)fscanf(f,"pitch=%f height=%f fwd=%f fov=%d grapple=%f",&fpv_pitch_deg,&fpv_height_m,&fpv_fwd_m,&fpv_fov_deg,&fpv_grapple_dist);fclose(f);}
+ if(f){
+  int w=0;
+  int got=fscanf(f,"pitch=%f height=%f fwd=%f fov=%d grapple=%f wobble=%d",&fpv_pitch_deg,&fpv_height_m,&fpv_fwd_m,&fpv_fov_deg,&fpv_grapple_dist,&w);
+  if(got>=6)fpv_wobble=w;
+  fclose(f);
+ }
  if(fpv_fov_deg<60||fpv_fov_deg>110)fpv_fov_deg=90;
  if(fpv_grapple_dist<0.f||fpv_grapple_dist>1.2f)fpv_grapple_dist=0.65f;
+ if(fpv_wobble<0||fpv_wobble>3)fpv_wobble=0;
 }
 static void fpv_cfg_save(void){
  FILE *f=fopen("ufc6_fpv.ini","w");
- if(f){fprintf(f,"pitch=%.2f height=%.3f fwd=%.3f fov=%d grapple=%.2f\n",fpv_pitch_deg,fpv_height_m,fpv_fwd_m,fpv_fov_deg,fpv_grapple_dist);fclose(f);}
+ if(f){fprintf(f,"pitch=%.2f height=%.3f fwd=%.3f fov=%d grapple=%.2f wobble=%d\n",fpv_pitch_deg,fpv_height_m,fpv_fwd_m,fpv_fov_deg,fpv_grapple_dist,fpv_wobble);fclose(f);}
+ fpv_cfg_tick=PHOTO_NOW();
 }
 static void fpv_poll_keys(void){
  ULONGLONG now=PHOTO_NOW();
@@ -65,12 +74,21 @@ static void fpv_poll_keys(void){
  if(GetAsyncKeyState(VK_NEXT)&0x8000){fpv_pitch_deg-=2.5f;changed=1;}
  if(GetAsyncKeyState(VK_INSERT)&0x8000){fpv_height_m+=0.05f;changed=1;}
  if(GetAsyncKeyState(VK_DELETE)&0x8000){fpv_height_m-=0.05f;changed=1;}
- if(GetAsyncKeyState(VK_HOME)&0x8000){fpv_pitch_deg=0.f;fpv_height_m=0.f;changed=1;}
+ if((GetAsyncKeyState(VK_OEM_PLUS)&0x8000)||(GetAsyncKeyState(VK_ADD)&0x8000)){fpv_fov_deg+=5;changed=1;}
+ if((GetAsyncKeyState(VK_OEM_MINUS)&0x8000)||(GetAsyncKeyState(VK_SUBTRACT)&0x8000)){fpv_fov_deg-=5;changed=1;}
+ if(GetAsyncKeyState(VK_OEM_6)&0x8000){fpv_fwd_m+=0.05f;changed=1;}
+ if(GetAsyncKeyState(VK_OEM_4)&0x8000){fpv_fwd_m-=0.05f;changed=1;}
+ if((GetAsyncKeyState(VK_END)&0x8000)&&now-fpv_key_tick>=250){fpv_wobble=(fpv_wobble+1)&3;changed=1;}
+ if(GetAsyncKeyState(VK_HOME)&0x8000){fpv_pitch_deg=0.f;fpv_height_m=0.f;fpv_fwd_m=0.f;changed=1;}
  if(changed){
   if(fpv_pitch_deg<-85.f)fpv_pitch_deg=-85.f;
   if(fpv_pitch_deg>85.f)fpv_pitch_deg=85.f;
   if(fpv_height_m<-1.5f)fpv_height_m=-1.5f;
   if(fpv_height_m>1.5f)fpv_height_m=1.5f;
+  if(fpv_fwd_m<-0.5f)fpv_fwd_m=-0.5f;
+  if(fpv_fwd_m>0.8f)fpv_fwd_m=0.8f;
+  if(fpv_fov_deg<60)fpv_fov_deg=60;
+  if(fpv_fov_deg>110)fpv_fov_deg=110;
   fpv_key_tick=now;
   fpv_cfg_save();
  }
@@ -302,19 +320,22 @@ static void fpv_restore(void){
  fpv_owner=0;fpv_camera=0;InterlockedExchange(&fpv_active,0);
 }
 static int fpv_grapple_paused,fpv_has_last,fpv_last_target,fpv_pose_valid;
-static float fpv_last_pos[3],fpv_smooth_pose[16];
+static float fpv_last_pos[3],fpv_smooth_pose[16],fpv_prev_vel[3],fpv_bob_phase,fpv_jolt_pitch,fpv_jolt_roll;
 static ULONGLONG fpv_grapple_tick;
-static void smooth_fpv_pose(const float *target,float dt){
- if(!fpv_pose_valid){memcpy(fpv_smooth_pose,target,64);fpv_pose_valid=1;return;}
+static void smooth_fpv_pose(const float *target,float dt,float *out_pose){
+ if(!fpv_pose_valid){memcpy(fpv_smooth_pose,target,64);fpv_pose_valid=1;fpv_bob_phase=0.f;fpv_jolt_pitch=0.f;fpv_jolt_roll=0.f;memset(fpv_prev_vel,0,sizeof(fpv_prev_vel));memcpy(out_pose,fpv_smooth_pose,64);return;}
  if(!isfinite(dt)||dt<0.001f)dt=0.001f;
  if(dt>0.05f)dt=0.05f;
- float a=1.f-expf(-18.f*dt);
+ static const float rates[]={18.f,14.f,22.f,45.f};
+ float rate=rates[(fpv_wobble>=0&&fpv_wobble<=3)?fpv_wobble:0];
+ float a=1.f-expf(-rate*dt);
+ float prev_x=fpv_smooth_pose[12],prev_y=fpv_smooth_pose[13],prev_z=fpv_smooth_pose[14];
  for(int i=12;i<15;++i)fpv_smooth_pose[i]+=(target[i]-fpv_smooth_pose[i])*a;
  float fx=-fpv_smooth_pose[8]+(-target[8]-(-fpv_smooth_pose[8]))*a;
  float fy=-fpv_smooth_pose[9]+(-target[9]-(-fpv_smooth_pose[9]))*a;
  float fz=-fpv_smooth_pose[10]+(-target[10]-(-fpv_smooth_pose[10]))*a;
  float fl=sqrtf(fx*fx+fy*fy+fz*fz);
- if(fl<1e-4f){memcpy(fpv_smooth_pose,target,64);return;}
+ if(fl<1e-4f){memcpy(fpv_smooth_pose,target,64);memcpy(out_pose,fpv_smooth_pose,64);return;}
  fx/=fl;fy/=fl;fz/=fl;
  float rx=-fz,ry=0.f,rz=fx;
  float rl=sqrtf(rx*rx+rz*rz);
@@ -324,6 +345,34 @@ static void smooth_fpv_pose(const float *target,float dt){
  fpv_smooth_pose[4]=ux;fpv_smooth_pose[5]=uy;fpv_smooth_pose[6]=uz;fpv_smooth_pose[7]=0.f;
  fpv_smooth_pose[8]=-fx;fpv_smooth_pose[9]=-fy;fpv_smooth_pose[10]=-fz;fpv_smooth_pose[11]=0.f;
  fpv_smooth_pose[15]=1.f;
+ memcpy(out_pose,fpv_smooth_pose,64);
+ if(fpv_wobble>0){
+  float vx=(fpv_smooth_pose[12]-prev_x)/dt,vy=(fpv_smooth_pose[13]-prev_y)/dt,vz=(fpv_smooth_pose[14]-prev_z)/dt;
+  float dvx=vx-fpv_prev_vel[0],dvz=vz-fpv_prev_vel[2];
+  fpv_prev_vel[0]=vx;fpv_prev_vel[1]=vy;fpv_prev_vel[2]=vz;
+  float speed=sqrtf(vx*vx+vz*vz);if(speed>4.f)speed=4.f;
+  fpv_bob_phase+=dt*(5.5f+speed*3.2f);
+  if(fpv_bob_phase>628.3185f)fpv_bob_phase-=628.3185f;
+  float bob_amp=fpv_wobble==1?0.018f:fpv_wobble==2?0.035f:0.045f;
+  float roll_max=fpv_wobble==1?0.035f:fpv_wobble==2?0.075f:0.095f;
+  float lat_vel=vx*rx+vz*rz;
+  float roll=-lat_vel*(roll_max*0.45f);
+  if(roll<-roll_max)roll=-roll_max;if(roll>roll_max)roll=roll_max;
+  if(fpv_wobble>=2){
+   float jolt_lat=(dvx*rx+dvz*rz)*0.008f,jolt_fwd=(dvx*fx+dvz*fz)*0.008f;
+   fpv_jolt_roll+=jolt_lat;fpv_jolt_pitch+=jolt_fwd;
+   if(fpv_jolt_roll<-0.12f)fpv_jolt_roll=-0.12f;if(fpv_jolt_roll>0.12f)fpv_jolt_roll=0.12f;
+   if(fpv_jolt_pitch<-0.10f)fpv_jolt_pitch=-0.10f;if(fpv_jolt_pitch>0.10f)fpv_jolt_pitch=0.10f;
+   float decay=expf(-10.f*dt);fpv_jolt_roll*=decay;fpv_jolt_pitch*=decay;
+  }else{fpv_jolt_roll=0.f;fpv_jolt_pitch=0.f;}
+  float move_gain=speed>0.15f?(speed/2.5f>1.f?1.f:speed/2.5f):0.08f;
+  out_pose[13]+=sinf(fpv_bob_phase)*bob_amp*move_gain;
+  out_pose[12]+=rx*cosf(fpv_bob_phase*0.5f)*(bob_amp*0.35f)*move_gain;
+  out_pose[14]+=rz*cosf(fpv_bob_phase*0.5f)*(bob_amp*0.35f)*move_gain;
+  float total_roll=roll+fpv_jolt_roll+sinf(fpv_bob_phase*0.5f)*(roll_max*0.25f)*move_gain;
+  if(fabsf(total_roll)>1e-4f){float fwd_axis[3]={fx,fy,fz};for(int axis=0;axis<3;++axis)photo_rotate(out_pose+axis*4,fwd_axis,total_roll);}
+  if(fabsf(fpv_jolt_pitch)>1e-4f){float right_axis[3]={out_pose[0],out_pose[1],out_pose[2]};for(int axis=0;axis<3;++axis)photo_rotate(out_pose+axis*4,right_axis,fpv_jolt_pitch);}
+ }
 }
 static void fpv_step(uintptr_t o,float dt){
  int target=(int)InterlockedCompareExchange(&fpv_target,0,0);
@@ -388,9 +437,9 @@ static void fpv_step(uintptr_t o,float dt){
  if(fpv_owner!=o||*(uintptr_t*)(o+0xc8)!=fpv_camera||*(unsigned*)(o+8)!=1){fpv_pose_valid=0;fpv_restore();return;}
  InterlockedExchange(&fpv_diag_code,8);
  fpv_poll_keys();
- float pose[16];build_fpv_pose(head_m,opp_m,pose);
- smooth_fpv_pose(pose,dt);
- set_pose(fpv_camera,fpv_smooth_pose);*(float*)(fpv_camera+0xac)=(float)fpv_fov_deg;
+ float pose[16],out_pose[16];build_fpv_pose(head_m,opp_m,pose);
+ smooth_fpv_pose(pose,dt,out_pose);
+ set_pose(fpv_camera,out_pose);*(float*)(fpv_camera+0xac)=(float)fpv_fov_deg;
  cage_apply(1);
 }
 static void __attribute__((sysv_abi)) update(uintptr_t o,float dt){

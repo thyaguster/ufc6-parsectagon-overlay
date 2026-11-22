@@ -159,6 +159,34 @@ int fight_report_format(const FightReportRaw *raw,const char *version,const char
 static int make_directory(const wchar_t *path){
     return CreateDirectoryW(path,NULL)||GetLastError()==ERROR_ALREADY_EXISTS;
 }
+static int report_folder(const wchar_t *documents,wchar_t *folder,size_t count,int create){
+    wchar_t parent[MAX_PATH],game[MAX_PATH];
+    int ok=swprintf(parent,MAX_PATH,L"%ls\\UFC Parsectagon Overlay",documents)>0&&
+           swprintf(game,MAX_PATH,L"%ls\\UFC6",parent)>0&&
+           swprintf(folder,count,L"%ls\\Fight Reports",game)>0;
+    return ok&&(!create||(make_directory(parent)&&make_directory(game)&&make_directory(folder)));
+}
+static void migrate_report_files(const wchar_t *source,const wchar_t *destination){
+    wchar_t pattern[MAX_PATH],from[MAX_PATH],to[MAX_PATH];
+    if(swprintf(pattern,MAX_PATH,L"%ls\\fight-*",source)<=0)return;
+    WIN32_FIND_DATAW data;HANDLE find=FindFirstFileW(pattern,&data);
+    if(find==INVALID_HANDLE_VALUE)return;
+    do{
+        if((data.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY)||
+           swprintf(from,MAX_PATH,L"%ls\\%ls",source,data.cFileName)<=0||
+           swprintf(to,MAX_PATH,L"%ls\\%ls",destination,data.cFileName)<=0)continue;
+        if(GetFileAttributesW(to)==INVALID_FILE_ATTRIBUTES)
+            MoveFileExW(from,to,MOVEFILE_WRITE_THROUGH);
+    }while(FindNextFileW(find,&data));
+    FindClose(find);
+}
+static void migrate_old_report_folders(const wchar_t *documents,const wchar_t *destination){
+    wchar_t old[MAX_PATH];
+    if(swprintf(old,MAX_PATH,L"%ls\\UFC 6 Parsectagon Overlay\\Fight Reports",documents)>0)
+        migrate_report_files(old,destination);
+    if(swprintf(old,MAX_PATH,L"%ls\\Parsectagon\\Fight Reports",documents)>0)
+        migrate_report_files(old,destination);
+}
 static void set_error(wchar_t *out,size_t count,const wchar_t *message){
     if(out&&count)lstrcpynW(out,message,(int)count);
 }
@@ -196,12 +224,12 @@ int fight_report_export(const wchar_t *game_version,int new_engine,
     if(FAILED(SHGetKnownFolderPath(&documents_id,KF_FLAG_CREATE,NULL,&documents))||!documents){
         set_error(error,error_count,L"Windows Documents folder is unavailable.");return 0;
     }
-    wchar_t parent[MAX_PATH],folder[MAX_PATH],target[MAX_PATH];
-    int ok=swprintf(parent,MAX_PATH,L"%ls\\UFC 6 Parsectagon Overlay",documents)>0&&
-           swprintf(folder,MAX_PATH,L"%ls\\Fight Reports",parent)>0;
+    wchar_t folder[MAX_PATH],target[MAX_PATH];
+    int ok=report_folder(documents,folder,MAX_PATH,1);
+    if(ok)migrate_old_report_folders(documents,folder);
     CoTaskMemFree(documents);
-    if(!ok||!make_directory(parent)||!make_directory(folder)){
-        set_error(error,error_count,L"Could not create Documents\\UFC 6 Parsectagon Overlay\\Fight Reports.");return 0;
+    if(!ok){
+        set_error(error,error_count,L"Could not create Documents\\UFC Parsectagon Overlay\\UFC6\\Fight Reports.");return 0;
     }
     SYSTEMTIME now;GetLocalTime(&now);
     wchar_t short_id[9];
@@ -260,12 +288,12 @@ int fight_report_export_result(const wchar_t *game_version,int new_engine,
     if(FAILED(SHGetKnownFolderPath(&documents_id,KF_FLAG_CREATE,NULL,&documents))||!documents){
         set_error(error,error_count,L"Windows Documents folder is unavailable.");return 0;
     }
-    wchar_t parent[MAX_PATH],folder[MAX_PATH],target[MAX_PATH];
-    int ok=swprintf(parent,MAX_PATH,L"%ls\\UFC 6 Parsectagon Overlay",documents)>0&&
-           swprintf(folder,MAX_PATH,L"%ls\\Fight Reports",parent)>0;
+    wchar_t folder[MAX_PATH],target[MAX_PATH];
+    int ok=report_folder(documents,folder,MAX_PATH,1);
+    if(ok)migrate_old_report_folders(documents,folder);
     CoTaskMemFree(documents);
-    if(!ok||!make_directory(parent)||!make_directory(folder)){
-        set_error(error,error_count,L"Could not create Documents\\UFC 6 Parsectagon Overlay\\Fight Reports.");return 0;
+    if(!ok){
+        set_error(error,error_count,L"Could not create Documents\\UFC Parsectagon Overlay\\UFC6\\Fight Reports.");return 0;
     }
     wchar_t short_id[9];for(int i=0;i<8;++i)short_id[i]=(wchar_t)(unsigned char)id[i];short_id[8]=0;
     if(swprintf(target,MAX_PATH,L"%ls\\fight-result-%ls.json",folder,short_id)<=0){
@@ -442,9 +470,12 @@ int fight_report_read_latest(FightReportSummary *out){
     PWSTR documents=NULL;
     if(FAILED(SHGetKnownFolderPath(&documents_id,0,NULL,&documents))||!documents)return 0;
     wchar_t folder[MAX_PATH];
-    int ok=swprintf(folder,MAX_PATH,L"%ls\\UFC 6 Parsectagon Overlay\\Fight Reports",documents)>0;
+    int ok=report_folder(documents,folder,MAX_PATH,1);
+    if(ok)migrate_old_report_folders(documents,folder);
     if(ok&&fight_report_read_from_folder(folder,out)){CoTaskMemFree(documents);return 1;}
     /* Older captures remain readable after the output folder is renamed. */
+    ok=swprintf(folder,MAX_PATH,L"%ls\\UFC 6 Parsectagon Overlay\\Fight Reports",documents)>0;
+    if(ok&&fight_report_read_from_folder(folder,out)){CoTaskMemFree(documents);return 1;}
     ok=swprintf(folder,MAX_PATH,L"%ls\\Parsectagon\\Fight Reports",documents)>0;
     CoTaskMemFree(documents);
     return ok?fight_report_read_from_folder(folder,out):0;

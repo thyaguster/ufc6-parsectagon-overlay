@@ -12,7 +12,7 @@ using System.Text.RegularExpressions;
 using System.Web.Script.Serialization;
 namespace UFC6OverlaySetup {
  public static class Diagnostics {
-  public static readonly string[] Files={"UFC 6.exe","UFC 6 Parsec.exe","UFC 6 novo.exe","version.dll","libwinpthread-1.dll","winmm.dll","ufc6_pthread_original.dll","ufc6_menu_layer.dll","ufc6_menu_layer.json","ufc6_menu_restart.exe","ufc6_menu_icons.exe","ufc6_menu_update.exe"};
+  public static readonly string[] Files={"UFC 6.exe","UFC 6 Parsec.exe","UFC 6 novo.exe","version.dll","libwinpthread-1.dll","winmm.dll","ufc6_pthread_original.dll","ufc6_menu_layer.dll","ufc6_menu_layer.json","ufc6_menu_restart.exe","ufc6_menu_icons.exe","ufc6_menu_config.exe"};
   static readonly string[] Logs={"ufc6-quit-menu.log","ufc6-quit-menu-vulkan.log"};
   const int MaxLog=512*1024;
   static Dictionary<string,string> Expected(){using(var stream=Assembly.GetExecutingAssembly().GetManifestResourceStream("diagnostics-components.json")){if(stream==null)return new Dictionary<string,string>();using(var reader=new StreamReader(stream))return new JavaScriptSerializer().Deserialize<Dictionary<string,string>>(reader.ReadToEnd().TrimStart('\ufeff'));}}

@@ -7,6 +7,14 @@ using System.Runtime.InteropServices;
 using System.Text;
 
 namespace UFC6OverlaySetup {
+    public sealed class FpvPreset {
+        public string Name;
+        public float PitchDeg, HeightM, FwdM, GrappleDist;
+        public int FovDeg, Wobble;
+        public bool BuiltIn;
+        public override string ToString() { return BuiltIn ? Name + " (Built-in)" : Name; }
+    }
+
     public sealed class OverlayConfig {
         public const uint PadBack = 0x0004, PadMenu = 0x0008, PadLS = 0x0100, PadRS = 0x0200, PadLB = 0x0400, PadRB = 0x0800, PadY = 0x1000, PadB = 0x2000, PadA = 0x4000, PadX = 0x8000;
         public const uint ShortcutMask = 0x0000FCFE;
@@ -68,12 +76,25 @@ namespace UFC6OverlaySetup {
         public int BoxStyle = 4;
         public int WindowSize = 2;
 
-        // FPV Camera (ufc6_fpv.ini)
+        public static readonly string[] FpvWobbleNames = { "Stabilized", "Subtle", "Dynamic", "Raw" };
+
+        // FPV Camera (ufc6_fpv.ini + ufc6_fpv_presets.ini)
         public float FpvPitchDeg = 0f;
         public float FpvHeightM = 0f;
         public float FpvFwdM = 0.24f;
         public int FpvFovDeg = 90;
         public float FpvGrappleDist = 0.65f;
+        public int FpvWobble = 0;
+        public List<FpvPreset> FpvPresets = new List<FpvPreset>();
+
+        public static FpvPreset[] BuiltInFpvPresets() {
+            return new[] {
+                new FpvPreset { Name = "Standard FPV", FovDeg = 90, PitchDeg = 0f, HeightM = 0f, FwdM = 0f, GrappleDist = 0.65f, Wobble = 0, BuiltIn = true },
+                new FpvPreset { Name = "Wide Action", FovDeg = 105, PitchDeg = -2f, HeightM = 0.04f, FwdM = 0.08f, GrappleDist = 0.65f, Wobble = 2, BuiltIn = true },
+                new FpvPreset { Name = "Over-the-Shoulder", FovDeg = 80, PitchDeg = -4f, HeightM = 0.10f, FwdM = -0.35f, GrappleDist = 0.50f, Wobble = 1, BuiltIn = true },
+                new FpvPreset { Name = "Tight Broadcast", FovDeg = 75, PitchDeg = -6f, HeightM = 0.15f, FwdM = -0.45f, GrappleDist = 0f, Wobble = 0, BuiltIn = true }
+            };
+        }
 
         public OverlayConfig() {
             Keybinds[9] = 0x78;   // F9 -> Photo Mode
@@ -203,6 +224,35 @@ namespace UFC6OverlaySetup {
                         else if (k == "fwd" && float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out fv)) cfg.FpvFwdM = Math.Max(-0.5f, Math.Min(0.8f, fv));
                         else if (k == "fov" && int.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out iv)) cfg.FpvFovDeg = Clamp(iv, 60, 110);
                         else if (k == "grapple" && float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out fv)) cfg.FpvGrappleDist = Math.Max(0f, Math.Min(1.2f, fv));
+                        else if (k == "wobble" && int.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out iv)) cfg.FpvWobble = Clamp(iv, 0, FpvWobbleNames.Length - 1);
+                    }
+                } catch { }
+            }
+            string presetsPath = Path.Combine(folder, "ufc6_fpv_presets.ini");
+            if (File.Exists(presetsPath)) {
+                try {
+                    foreach (string line in File.ReadAllLines(presetsPath, Encoding.UTF8)) {
+                        string trimmed = line.Trim();
+                        if (trimmed.Length == 0 || trimmed.StartsWith("#")) continue;
+                        string[] cols = trimmed.Split('|');
+                        if (cols.Length < 6) continue;
+                        float p, h, fw, g; int fov; int wob = 0;
+                        if (float.TryParse(cols[1], NumberStyles.Float, CultureInfo.InvariantCulture, out p) &&
+                            float.TryParse(cols[2], NumberStyles.Float, CultureInfo.InvariantCulture, out h) &&
+                            float.TryParse(cols[3], NumberStyles.Float, CultureInfo.InvariantCulture, out fw) &&
+                            int.TryParse(cols[4], NumberStyles.Integer, CultureInfo.InvariantCulture, out fov) &&
+                            float.TryParse(cols[5], NumberStyles.Float, CultureInfo.InvariantCulture, out g)) {
+                            if (cols.Length >= 7) int.TryParse(cols[6], NumberStyles.Integer, CultureInfo.InvariantCulture, out wob);
+                            cfg.FpvPresets.Add(new FpvPreset {
+                                Name = cols[0].Trim(),
+                                PitchDeg = Math.Max(-85f, Math.Min(85f, p)),
+                                HeightM = Math.Max(-1.5f, Math.Min(1.5f, h)),
+                                FwdM = Math.Max(-0.5f, Math.Min(0.8f, fw)),
+                                FovDeg = Clamp(fov, 60, 110),
+                                GrappleDist = Math.Max(0f, Math.Min(1.2f, g)),
+                                Wobble = Clamp(wob, 0, FpvWobbleNames.Length - 1)
+                            });
+                        }
                     }
                 } catch { }
             }
@@ -246,9 +296,23 @@ namespace UFC6OverlaySetup {
             Write(ini, "Menu", "WindowSize", WindowSize.ToString(CultureInfo.InvariantCulture));
 
             string fpv = Path.Combine(folder, "ufc6_fpv.ini");
-            string fpvLine = string.Format(CultureInfo.InvariantCulture, "pitch={0:0.00} height={1:0.000} fwd={2:0.000} fov={3} grapple={4:0.00}\n",
-                FpvPitchDeg, FpvHeightM, FpvFwdM, FpvFovDeg, FpvGrappleDist);
+            string fpvLine = string.Format(CultureInfo.InvariantCulture, "pitch={0:0.00} height={1:0.000} fwd={2:0.000} fov={3} grapple={4:0.00} wobble={5}\n",
+                FpvPitchDeg, FpvHeightM, FpvFwdM, FpvFovDeg, FpvGrappleDist, FpvWobble);
             File.WriteAllText(fpv, fpvLine, Encoding.ASCII);
+
+            string presetsPath = Path.Combine(folder, "ufc6_fpv_presets.ini");
+            if (FpvPresets.Count == 0) {
+                if (File.Exists(presetsPath)) File.Delete(presetsPath);
+            } else {
+                var sb = new StringBuilder();
+                foreach (var p in FpvPresets) {
+                    string safeName = (p.Name ?? "Custom").Replace("|", "-").Replace("\r", "").Replace("\n", "").Trim();
+                    if (safeName.Length == 0) safeName = "Custom";
+                    sb.AppendFormat(CultureInfo.InvariantCulture, "{0}|{1:0.00}|{2:0.000}|{3:0.000}|{4}|{5:0.00}|{6}\n",
+                        safeName, p.PitchDeg, p.HeightM, p.FwdM, p.FovDeg, p.GrappleDist, p.Wobble);
+                }
+                File.WriteAllText(presetsPath, sb.ToString(), Encoding.UTF8);
+            }
         }
 
         static void Write(string ini, string section, string key, string val) {
@@ -282,6 +346,7 @@ namespace UFC6OverlaySetup {
                     FpvPitchDeg = -4.5f,
                     FpvGrappleDist = 0.80f
                 };
+                cfg.FpvPresets.Add(new FpvPreset { Name = "My Cam", FovDeg = 98, PitchDeg = -3f, HeightM = 0.05f, FwdM = 0.10f, GrappleDist = 0.55f });
                 cfg.Keybinds[0] = 0x76; // F7
                 foreach (string target in OverlayConfig.TargetFolders(root)) cfg.SaveToFolder(target);
 
@@ -293,6 +358,8 @@ namespace UFC6OverlaySetup {
                     throw new InvalidOperationException("Sibling novo sync failed.");
                 if (loadedBin.FpvFovDeg != 105 || Math.Abs(loadedBin.FpvPitchDeg - (-4.5f)) > 0.05f)
                     throw new InvalidOperationException("FPV INI round-trip failed.");
+                if (loadedNovo.FpvPresets.Count != 1 || loadedNovo.FpvPresets[0].Name != "My Cam" || loadedNovo.FpvPresets[0].FovDeg != 98)
+                    throw new InvalidOperationException("FPV preset round-trip failed.");
                 File.WriteAllText(reportPath, "PASS: configurator INI/FPV round-trip and dual-engine sync.");
             } finally {
                 try { Directory.Delete(root, true); } catch { }
