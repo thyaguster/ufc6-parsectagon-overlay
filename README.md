@@ -3,8 +3,8 @@
 <h1 align="center">UFC 6 Parsectagon Overlay</h1>
 
 <p align="center">
-  Modern multi-layout Vulkan in-frame overlay for <strong>EA SPORTS UFC 6</strong> (PORTHEON / Kyty).<br>
-  Replaces <a href="https://github.com/thyaguster/ufc6-actions-overlay">ufc6-actions-overlay</a> with a redesigned UI, 1-click presets, and multiple layout modes built on the same verified engine bridge.
+  Modern multi-layout Vulkan in-frame overlay for <strong>EA SPORTS UFC 6</strong> &amp; <strong>EA SPORTS UFC 4</strong> (PORTHEON / Kyty).<br>
+  Replaces <a href="https://github.com/thyaguster/ufc6-actions-overlay">ufc6-actions-overlay</a> with a redesigned UI, 1-click presets, Parsectagon Lobby integration, and multiple layout modes.
 </p>
 
 <p align="center">
@@ -20,20 +20,16 @@
 
 ## Quick installation
 
-The [UFC 4 expansion](ufc4/README.md) is a separate local prototype in this repository. The UFC 6 installer below does not install it.
-
 1. [Download the latest installer](https://github.com/thyaguster/ufc6-parsectagon-overlay/releases/latest): **UFC6-Parsectagon-Overlay-Setup-*.exe**.
-2. Close **UFC 6** and **PORTHEON**, run the installer, and select your **`PORTHEON\games\UFC6`** folder (the launcher folder containing `UFC6.exe`, not your extracted game-data folder).
-3. Click **Check folder**, then **Install / Update** once. The installer checks and updates both **Original / Parsec (`bin`)** and **PS5 Pro / DLSS (`novo`)** when present.
-4. Launch UFC 6 normally. Hold **LB + RB + Menu/Start** for ~800 ms, press **Guide**, or press **F10** to open the overlay.
+2. Close **UFC 6**, **UFC 4**, and **PORTHEON**, run the installer, and select your **`PORTHEON\games`** folder (to auto-detect both games) or an individual **`PORTHEON\games\UFC6`** / **`PORTHEON\games\UFC4`** folder.
+3. Check **UFC 6** and/or **UFC 4** in the installer, click **Check**, then **Install / Update** once. For UFC 6, the installer handles both **Original / Parsec (`bin`)** and **PS5 Pro / DLSS (`novo`)** when present; for UFC 4, it installs the shared overlay, controller prompt patcher, fight-report watcher, DLC & vanity unlocker, and Online menu Parsectagon takeover (see [UFC 4 details](ufc4/README.md)).
+4. Launch UFC 6 or UFC 4 normally. Hold **LB + RB + Menu/Start** for ~800 ms, press **Guide**, or press **F10** to open the overlay.
 
-> **After a PORTHEON update:** If a PORTHEON update overwrites overlay files, run the installer and click **Repair / Reinstall** to restore both engines while keeping your settings, screenshots, and `ufc6_pthread_original.dll`.
+> **After a PORTHEON update:** If a PORTHEON update overwrites overlay files, run the installer and click **Repair / Reinstall** to restore the selected games while keeping your settings, screenshots, and backups (`ufc6_pthread_original.dll` / `ufc4-overlay-backup`).
 
 **Support report:** Open **Export support report...** in setup or from the overlay. One ZIP contains separate component checks and bounded logs for both `bin` and `novo` when present. New reports are saved in `Documents/UFC 6 Parsectagon Overlay/SupportReports`; older reports remain in the previous folder.
 
 > **Upgrading from `ufc6-actions-overlay`:** `ufc6-parsectagon-overlay` is the direct successor to [ufc6-actions-overlay](https://github.com/thyaguster/ufc6-actions-overlay) and shares the same verified engine hooks, controller-icon patcher, Photo Mode, Replay controls, and Career/Live cheats. Keep `ufc6_pthread_original.dll` intact in `bin\`.
-
-> **Lobby switch for public releases:** Public GitHub/release builds use `-NoLobby` (`UFC6_ENABLE_LOBBY=0`) to keep the Online Lobby tab and in-game Online tab takeover disabled for now.
 
 ![UFC 6 Parsectagon Overlay running in-game](docs/screenshots/ingame/ingame-topbar-apex.jpg)
 
@@ -96,17 +92,17 @@ Choose from **Parsectagon**, **Green**, **Blue**, **Red**, **Purple**, **Amber**
 Requires the local Zig toolchain in `.tools\ziglang\zig.exe` (see `build.ps1`):
 
 ```powershell
-# Public release build (Lobby disabled)
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -NoLobby
+# Full build (UFC 6 + UFC 4, Parsectagon Lobby enabled)
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 
-# Run test suite (Lobby disabled)
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -Test -NoLobby
+# Run test suite
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -Test
 
-# Package release ZIP + setup EXE (Lobby disabled)
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\package.ps1 -NoLobby
+# Package release ZIP + setup EXE
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\package.ps1
 ```
 
-Omit `-NoLobby` to build with the Parsectagon Lobby tab enabled.
+Pass `-NoLobby` to disable the Parsectagon Lobby tab if needed.
 
 ## Documentation & Notices
 
