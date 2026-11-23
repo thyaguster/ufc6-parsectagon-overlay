@@ -1,3 +1,8 @@
+## v0.9.94 — UFC 4 Configurator Support & Vulkan Bootstrap Fix
+
+- **UFC 4 Configurator (`ufc6_menu_config.exe`):** Bundled `ufc6_menu_config.exe` into UFC 4 installs (`ufc4.companion_files`), added `sacredfire-game.exe` / `ufc4-quit-menu.ini` detection (with `ufc4_actions.ini` fallback), added **UFC 4: Unlock DLC & vanity items** and **Replace Online menu with Parsectagon** toggles, and enabled Setup's **Configure...** / auto-open for UFC 4.
+- **UFC 4 Vulkan Loader Bootstrap Fix (`winmm.dll` / `ufc4_actions_layer.json`):** Updated `ufc4_winmm.c` to use UFC 6's `overlay_bootstrap` environment merging (`VK_ADD_LAYER_PATH`, `VK_ADD_IMPLICIT_LAYER_PATH`, no 1024-char truncation, no large `DllMain` stack buffers) and added `disable_environment` (`DISABLE_VK_LAYER_UFC4_actions=1`) to `ufc4_actions_layer.json`.
+
 ## v0.9.93 — UFC 4 DLC & Vanity Unlocker + Online Menu Lobby
 
 - **UFC 4 DLC & Vanity Unlocker + Switch:** Added all 34 vanity clothing, hat, tattoo, and accessory patches alongside the 4 DLC fighter/item patches, auto-resolving UFC 4's `guest_base`. Added **Unlock DLC & vanity items** in **Settings > Game & launcher** (On by default, saved as `UnlockDlcVanity` in `ufc4-quit-menu.ini`, live On/Off toggle in memory).

@@ -393,7 +393,7 @@ namespace UFC6OverlaySetup {
             support.Text="Support report...";support.SetBounds(32,624,196,44);support.Enabled=false;
             support.Click+=delegate{try{using(var diagnostic=new DiagnosticsForm(manager.Version,Diagnostics.Folder(folder.Text))){diagnostic.ShowDialog(this);}}catch(Exception error){status.Text=error.Message;}};
             configure.Text="Configure...";configure.SetBounds(238,624,124,44);configure.Enabled=false;
-            configure.Click+=delegate{try{using(var cfg=new ConfiguratorForm(folder.Text)){cfg.ShowDialog(this);}}catch(Exception error){status.Text=error.Message;}};
+            configure.Click+=delegate{try{string cfgTarget=chkUfc6.Checked&&!string.IsNullOrWhiteSpace(folder.Text)?folder.Text:folder4.Text;using(var cfg=new ConfiguratorForm(cfgTarget)){cfg.ShowDialog(this);}}catch(Exception error){status.Text=error.Message;}};
             install.Text="Install / Update";install.SetBounds(372,624,176,44);install.Tone=ButtonTone.Primary;install.Enabled=false;
             remove.Text="Remove overlay";remove.SetBounds(558,624,170,44);remove.Tone=ButtonTone.Danger;remove.Enabled=false;
             autoConfigure.Location=new Point(478,680);
@@ -487,7 +487,8 @@ namespace UFC6OverlaySetup {
                         if (state4 != null) sum.Add("[UFC 4]\r\n" + state4.Summary(manager.Ufc4Engine));
                         status.Text = string.Join("\r\n\r\n", sum);
                     }
-                    support.Enabled = configure.Enabled = (state6 != null);
+                    support.Enabled = (state6 != null);
+                    configure.Enabled = (state6 != null || state4 != null);
                     bool rep6 = state6 != null && (state6.PortheonReplaced || state6.SiblingPortheonReplaced) && state6.HardConflicts.Count == 0;
                     bool rep4 = state4 != null && state4.PortheonReplaced && state4.HardConflicts.Count == 0;
                     repairMode = rep6 || rep4;
@@ -498,8 +499,11 @@ namespace UFC6OverlaySetup {
                     bool hasInstalled6 = state6 != null && (state6.Installed > 0 || state6.SiblingInstalled > 0) && state6.Conflicts.Count == 0;
                     bool hasInstalled4 = state4 != null && state4.Installed > 0 && state4.Conflicts.Count == 0;
                     remove.Enabled = hasInstalled6 || hasInstalled4;
-                    if (removal.HasValue && !removal.Value && autoConfigure.Checked && state6 != null) {
-                        try { using (var cfg = new ConfiguratorForm(state6.Folder)) cfg.ShowDialog(this); } catch { }
+                    if (removal.HasValue && !removal.Value && autoConfigure.Checked) {
+                        string cfgTarget = state6 != null ? state6.Folder : (state4 != null ? state4.Folder : null);
+                        if (cfgTarget != null) {
+                            try { using (var cfg = new ConfiguratorForm(cfgTarget)) cfg.ShowDialog(this); } catch { }
+                        }
                     }
                 }
                 worker.Dispose();

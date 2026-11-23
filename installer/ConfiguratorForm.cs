@@ -114,6 +114,8 @@ namespace UFC6OverlaySetup {
         readonly PillToggle chkScreenshotUi = new PillToggle();
         readonly PillToggle chkAutoLaunch = new PillToggle();
         readonly PillToggle chkFavFirst = new PillToggle();
+        readonly PillToggle chkReplaceOnline = new PillToggle();
+        readonly PillToggle chkUnlockDlc = new PillToggle();
         readonly PillToggle chkLongevity = new PillToggle();
         readonly PillSelector selTraining = new PillSelector(new[] { "1x (Off)", "2x", "5x", "10x" });
 
@@ -160,7 +162,9 @@ namespace UFC6OverlaySetup {
             config = OverlayConfig.Load(targets[0]);
             appVersion = Assembly.GetExecutingAssembly().GetName().Version.ToString(3);
 
-            Text = "UFC 6 Parsectagon Overlay — Configurator";
+            Text = OverlayConfig.IsUfc4Folder(targets[0])
+                ? "UFC 4 Parsectagon Overlay — Configurator"
+                : "UFC 6 Parsectagon Overlay — Configurator";
             ClientSize = new Size(980, 780);
             KeyPreview = true;
 
@@ -259,12 +263,14 @@ namespace UFC6OverlaySetup {
                 new KeyValuePair<string, Control>("Skip title & network warnings (Exp.)", chkSkipPopups),
                 new KeyValuePair<string, Control>("Mute audio when unfocused / minimized", chkMuteUnfocused),
                 new KeyValuePair<string, Control>("Instant Replay in offline fights", chkInstantReplay),
-                new KeyValuePair<string, Control>("Offer replay after decisions", chkDecisionReplays)
+                new KeyValuePair<string, Control>("Offer replay after decisions", chkDecisionReplays),
+                new KeyValuePair<string, Control>("UFC 4: Unlock DLC & vanity items", chkUnlockDlc)
             };
             var right = new KeyValuePair<string, Control>[] {
                 new KeyValuePair<string, Control>("Include overlay inside screenshots", chkScreenshotUi),
-                new KeyValuePair<string, Control>("Auto-launch UFC 6 after PC restart", chkAutoLaunch),
+                new KeyValuePair<string, Control>("Auto-launch after PC restart", chkAutoLaunch),
                 new KeyValuePair<string, Control>("Open overlay on Favorites tab first", chkFavFirst),
+                new KeyValuePair<string, Control>("Replace Online menu with Parsectagon", chkReplaceOnline),
                 new KeyValuePair<string, Control>("Career: Longevity protection", chkLongevity),
                 new KeyValuePair<string, Control>("Training reward multiplier", selTraining)
             };
@@ -584,6 +590,8 @@ namespace UFC6OverlaySetup {
             chkScreenshotUi.Checked = config.IncludeOverlayInScreenshots;
             chkAutoLaunch.Checked = config.AutoLaunchAfterRestart;
             chkFavFirst.Checked = config.OpenFavoritesFirst;
+            chkReplaceOnline.Checked = config.ReplaceOnlineTabWithParsectagon;
+            chkUnlockDlc.Checked = config.UnlockDlcVanity;
             chkLongevity.Checked = config.LongevityProtection;
             selTraining.SelectedIndex = config.TrainingRewardMultiplier == 2 ? 1 : config.TrainingRewardMultiplier == 5 ? 2 : config.TrainingRewardMultiplier == 10 ? 3 : 0;
 
@@ -636,6 +644,8 @@ namespace UFC6OverlaySetup {
                 config.IncludeOverlayInScreenshots = chkScreenshotUi.Checked;
                 config.AutoLaunchAfterRestart = chkAutoLaunch.Checked;
                 config.OpenFavoritesFirst = chkFavFirst.Checked;
+                config.ReplaceOnlineTabWithParsectagon = chkReplaceOnline.Checked;
+                config.UnlockDlcVanity = chkUnlockDlc.Checked;
                 config.LongevityProtection = chkLongevity.Checked;
                 int[] mults = { 1, 2, 5, 10 };
                 config.TrainingRewardMultiplier = mults[selTraining.SelectedIndex];

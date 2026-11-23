@@ -56,6 +56,8 @@ namespace UFC6OverlaySetup {
         public bool IncludeOverlayInScreenshots = true;
         public bool AutoLaunchAfterRestart = true;
         public bool OpenFavoritesFirst = false;
+        public bool ReplaceOnlineTabWithParsectagon = true;
+        public bool UnlockDlcVanity = true;
         public bool LongevityProtection = false;
         public int TrainingRewardMultiplier = 1;
 
@@ -141,18 +143,35 @@ namespace UFC6OverlaySetup {
             return vk != 0x10 && vk != 0x11 && vk != 0x12 && !(vk >= 0xA0 && vk <= 0xA5);
         }
 
+        public static bool IsUfc4Folder(string folder) {
+            return !string.IsNullOrEmpty(folder) && File.Exists(Path.Combine(folder, "sacredfire-game.exe"));
+        }
+        static string ConfigIniPath(string folder) {
+            if (IsUfc4Folder(folder)) {
+                string u4 = Path.Combine(folder, "ufc4-quit-menu.ini");
+                if (File.Exists(u4)) return u4;
+                string legacy = Path.Combine(folder, "ufc4_actions.ini");
+                return File.Exists(legacy) ? legacy : u4;
+            }
+            return Path.Combine(folder, "ufc6-quit-menu.ini");
+        }
         public static string NormalizeFolder(string folder) {
             folder = Path.GetFullPath(folder.Trim().Trim('"'));
-            if (!Directory.Exists(folder)) throw new IOException("Choose PORTHEON\\games\\UFC6 (bin / novo) or a Clean Kyty folder (kyty_emulator.exe).");
-            if (!File.Exists(Path.Combine(folder, "UFC 6.exe")) && File.Exists(Path.Combine(folder, "bin", "UFC 6.exe"))) folder = Path.Combine(folder, "bin");
-            else if (!File.Exists(Path.Combine(folder, "UFC 6.exe")) && !File.Exists(Path.Combine(folder, "UFC 6 novo.exe")) && File.Exists(Path.Combine(folder, "novo", "UFC 6 novo.exe"))) folder = Path.Combine(folder, "novo");
-            if (!File.Exists(Path.Combine(folder, "UFC 6.exe")) && !File.Exists(Path.Combine(folder, "UFC 6 novo.exe")) && !File.Exists(Path.Combine(folder, "kyty_emulator.exe")))
+            if (!Directory.Exists(folder)) throw new IOException("Choose PORTHEON\\games\\UFC6, PORTHEON\\games\\UFC4, or a Clean Kyty folder.");
+            if (!File.Exists(Path.Combine(folder, "UFC 6.exe")) && !File.Exists(Path.Combine(folder, "sacredfire-game.exe"))) {
+                if (File.Exists(Path.Combine(folder, "bin", "UFC 6.exe"))) folder = Path.Combine(folder, "bin");
+                else if (File.Exists(Path.Combine(folder, "bin", "sacredfire-game.exe"))) folder = Path.Combine(folder, "bin");
+                else if (!File.Exists(Path.Combine(folder, "UFC 6 novo.exe")) && File.Exists(Path.Combine(folder, "novo", "UFC 6 novo.exe"))) folder = Path.Combine(folder, "novo");
+            }
+            if (!File.Exists(Path.Combine(folder, "UFC 6.exe")) && !File.Exists(Path.Combine(folder, "UFC 6 novo.exe")) &&
+                !File.Exists(Path.Combine(folder, "kyty_emulator.exe")) && !File.Exists(Path.Combine(folder, "sacredfire-game.exe")))
                 throw new IOException("Game or Kyty engine was not found.");
             return folder;
         }
         public static List<string> TargetFolders(string folder) {
             string norm = NormalizeFolder(folder);
             var list = new List<string> { norm };
+            if (IsUfc4Folder(norm)) return list;
             DirectoryInfo parent = Directory.GetParent(norm);
             if (parent != null) {
                 string leaf = Path.GetFileName(norm);
@@ -169,7 +188,7 @@ namespace UFC6OverlaySetup {
 
         public static OverlayConfig Load(string folder) {
             var cfg = new OverlayConfig();
-            string ini = Path.Combine(folder, "ufc6-quit-menu.ini");
+            string ini = ConfigIniPath(folder);
             if (File.Exists(ini)) {
                 cfg.SkipStartupSplashes = GetPrivateProfileIntW("Menu", "SkipStartupSplashes", 1, ini) != 0;
                 cfg.SuppressOnlineNotices = GetPrivateProfileIntW("Menu", "SuppressOnlineNotices", 1, ini) != 0;
@@ -180,6 +199,8 @@ namespace UFC6OverlaySetup {
                 cfg.IncludeOverlayInScreenshots = GetPrivateProfileIntW("Menu", "IncludeOverlayInScreenshots", 1, ini) != 0;
                 cfg.AutoLaunchAfterRestart = GetPrivateProfileIntW("Menu", "AutoLaunchAfterRestart", 1, ini) != 0;
                 cfg.OpenFavoritesFirst = GetPrivateProfileIntW("Menu", "OpenFavoritesFirst", 0, ini) != 0;
+                cfg.ReplaceOnlineTabWithParsectagon = GetPrivateProfileIntW("Menu", "ReplaceOnlineTabWithParsectagon", 1, ini) != 0;
+                cfg.UnlockDlcVanity = GetPrivateProfileIntW("Menu", "UnlockDlcVanity", 1, ini) != 0;
                 cfg.LongevityProtection = GetPrivateProfileIntW("Menu", "LongevityProtection", 0, ini) != 0;
                 int mult = GetPrivateProfileIntW("Menu", "TrainingRewardMultiplier", 1, ini);
                 cfg.TrainingRewardMultiplier = (mult == 2 || mult == 5 || mult == 10) ? mult : 1;
@@ -268,7 +289,7 @@ namespace UFC6OverlaySetup {
                     if (Keybinds[j] == Keybinds[i]) throw new InvalidDataException("Duplicate keybind between " + BindingNames[i] + " and " + BindingNames[j]);
             }
 
-            string ini = Path.Combine(folder, "ufc6-quit-menu.ini");
+            string ini = Path.Combine(folder, IsUfc4Folder(folder) ? "ufc4-quit-menu.ini" : "ufc6-quit-menu.ini");
             Write(ini, "Menu", "SkipStartupSplashes", SkipStartupSplashes ? "1" : "0");
             Write(ini, "Menu", "SuppressOnlineNotices", SuppressOnlineNotices ? "1" : "0");
             Write(ini, "Menu", "StartupSkipPopups", StartupSkipPopups ? "1" : "0");
@@ -278,6 +299,8 @@ namespace UFC6OverlaySetup {
             Write(ini, "Menu", "IncludeOverlayInScreenshots", IncludeOverlayInScreenshots ? "1" : "0");
             Write(ini, "Menu", "AutoLaunchAfterRestart", AutoLaunchAfterRestart ? "1" : "0");
             Write(ini, "Menu", "OpenFavoritesFirst", OpenFavoritesFirst ? "1" : "0");
+            Write(ini, "Menu", "ReplaceOnlineTabWithParsectagon", ReplaceOnlineTabWithParsectagon ? "1" : "0");
+            Write(ini, "Menu", "UnlockDlcVanity", UnlockDlcVanity ? "1" : "0");
             Write(ini, "Menu", "LongevityProtection", LongevityProtection ? "1" : "0");
             Write(ini, "Menu", "TrainingRewardMultiplier", TrainingRewardMultiplier.ToString(CultureInfo.InvariantCulture));
             Write(ini, "Menu", "ButtonIcons", ButtonIcons);
@@ -360,6 +383,14 @@ namespace UFC6OverlaySetup {
                     throw new InvalidOperationException("FPV INI round-trip failed.");
                 if (loadedNovo.FpvPresets.Count != 1 || loadedNovo.FpvPresets[0].Name != "My Cam" || loadedNovo.FpvPresets[0].FovDeg != 98)
                     throw new InvalidOperationException("FPV preset round-trip failed.");
+                string u4bin = Path.Combine(root, "ufc4", "bin");
+                Directory.CreateDirectory(u4bin);
+                File.WriteAllBytes(Path.Combine(u4bin, "sacredfire-game.exe"), new byte[] { 1 });
+                var u4cfg = new OverlayConfig { UnlockDlcVanity = false, ReplaceOnlineTabWithParsectagon = false };
+                foreach (string target in OverlayConfig.TargetFolders(Path.Combine(root, "ufc4"))) u4cfg.SaveToFolder(target);
+                var loadedU4 = OverlayConfig.Load(u4bin);
+                if (loadedU4.UnlockDlcVanity || loadedU4.ReplaceOnlineTabWithParsectagon || !File.Exists(Path.Combine(u4bin, "ufc4-quit-menu.ini")))
+                    throw new InvalidOperationException("UFC 4 configurator INI round-trip failed.");
                 File.WriteAllText(reportPath, "PASS: configurator INI/FPV round-trip and dual-engine sync.");
             } finally {
                 try { Directory.Delete(root, true); } catch { }

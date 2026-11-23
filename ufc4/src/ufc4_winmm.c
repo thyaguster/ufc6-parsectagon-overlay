@@ -143,19 +143,43 @@ __declspec(dllexport) void Ufc4TestApplyIntroPreference(const wchar_t *bin){appl
 __declspec(dllexport) int Ufc4TestSyncSacredfireMovies(int enabled){return sync_sacredfire_movies(enabled);}
 __declspec(dllexport) int Ufc4TestSyncStartupAssets(const wchar_t *archive,const wchar_t *bundle,int enabled){return sync_startup_assets(archive,bundle,enabled);}
 #endif
-static void enable_layer(HMODULE self){
-    wchar_t exe[MAX_PATH],path[MAX_PATH],value[4096];
+static int u4_env_has(const wchar_t *list,const wchar_t *value){
+    size_t length=wcslen(value);
+    for(const wchar_t *start=list;*start;){
+        const wchar_t *end=wcschr(start,L';');size_t count=end?(size_t)(end-start):wcslen(start);
+        if(count==length&&!_wcsnicmp(start,value,length))return 1;
+        if(!end)break;start=end+1;
+    }
+    return 0;
+}
+static int u4_path_merge(wchar_t *value,size_t capacity,const wchar_t *list){
+    for(const wchar_t *start=list;*start;){
+        const wchar_t *end=wcschr(start,L';');size_t count=end?(size_t)(end-start):wcslen(start);
+        if(count){wchar_t part[16000];if(count>=16000)return 0;wmemcpy(part,start,count);part[count]=0;
+            if(!u4_env_has(value,part)){size_t used=wcslen(value);if(used+count+2>capacity)return 0;value[used++]=L';';wmemcpy(value+used,part,count+1);}
+        }
+        if(!end)break;start=end+1;
+    }
+    return 1;
+}
+static __declspec(noinline) void enable_layer(HMODULE self){
+    wchar_t exe[MAX_PATH],path[MAX_PATH],existing[16000],value[16384];
     if(!GetModuleFileNameW(NULL,exe,MAX_PATH)||!wcsstr(exe,L"sacredfire-game.exe"))return;
     if(!GetModuleFileNameW(self,path,MAX_PATH))return;
     wchar_t *slash=wcsrchr(path,L'\\');if(!slash)return;*slash=0;
     wchar_t required[MAX_PATH];wsprintfW(required,L"%ls\\ufc4_actions_layer.json",path);
     if(GetFileAttributesW(required)==INVALID_FILE_ATTRIBUTES)return;
-    DWORD n=GetEnvironmentVariableW(L"VK_LAYER_PATH",value,4096);
-    if(!n)SetEnvironmentVariableW(L"VK_LAYER_PATH",path);
-    else if(n<4096&&!wcsstr(value,path)){wchar_t merged[4096];wsprintfW(merged,L"%ls;%ls",path,value);SetEnvironmentVariableW(L"VK_LAYER_PATH",merged);}
-    n=GetEnvironmentVariableW(L"VK_INSTANCE_LAYERS",value,4096);
-    if(!n)SetEnvironmentVariableW(L"VK_INSTANCE_LAYERS",L"VK_LAYER_UFC4_actions");
-    else if(n<4096&&!wcsstr(value,L"VK_LAYER_UFC4_actions")){wchar_t merged[4096];wsprintfW(merged,L"VK_LAYER_UFC4_actions;%ls",value);SetEnvironmentVariableW(L"VK_INSTANCE_LAYERS",merged);}
+    lstrcpyW(value,path);
+    DWORD n=GetEnvironmentVariableW(L"VK_LAYER_PATH",existing,16000);
+    int complete=n<16000&&u4_path_merge(value,16384,n?existing:L"");
+    n=GetEnvironmentVariableW(L"VK_ADD_LAYER_PATH",existing,16000);
+    complete=complete&&n<16000&&u4_path_merge(value,16384,n?existing:L"");
+    if(complete)SetEnvironmentVariableW(L"VK_LAYER_PATH",value);
+    if(n<16000&&(!n||!u4_env_has(existing,path))){lstrcpyW(value,path);if(n){lstrcatW(value,L";");lstrcatW(value,existing);}SetEnvironmentVariableW(L"VK_ADD_LAYER_PATH",value);}
+    n=GetEnvironmentVariableW(L"VK_ADD_IMPLICIT_LAYER_PATH",existing,16000);
+    if(n<16000&&(!n||!u4_env_has(existing,path))){lstrcpyW(value,path);if(n){lstrcatW(value,L";");lstrcatW(value,existing);}SetEnvironmentVariableW(L"VK_ADD_IMPLICIT_LAYER_PATH",value);}
+    n=GetEnvironmentVariableW(L"VK_INSTANCE_LAYERS",existing,16000);
+    if(n<16000&&(!n||!u4_env_has(existing,L"VK_LAYER_UFC4_actions"))){lstrcpyW(value,L"VK_LAYER_UFC4_actions");if(n){lstrcatW(value,L";");lstrcatW(value,existing);}SetEnvironmentVariableW(L"VK_INSTANCE_LAYERS",value);}
     int preference=read_intro_preference(path);
     if(preference>=0){
         SetEnvironmentVariableW(L"BB_SKIP_MOVIES",preference?L"1":NULL);
