@@ -1644,7 +1644,11 @@ static void draw_modern_tab_rows(HDC dc, RECT panel, int start_y, int item_h, in
             else if (i == 2) value_chip(dc, control_rect, L"Presets", focused, 0);
             else value_chip(dc, control_rect, L"Host Fight", focused, 0);
         } else if (state->topbar_tab == TOPBAR_CHEATS) {
+#ifdef UFC4_OVERLAY
+            const wchar_t *cht_items[] = { L"Player 1 Infinite Stamina", L"Player 1 No Damage", L"Next Hit KO (25s)", L"Unlock DLC & vanity items", L"Savegame backups..." };
+#else
             const wchar_t *cht_items[] = { L"Player 1 Infinite Stamina", L"Player 1 No Damage", L"Next Hit KO (25s)", L"Career cheats...", L"Savegame backups..." };
+#endif
             text(dc, font_main, cht_items[i], label_rect, focused ? RGB(255, 255, 255) : theme->text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
             if (i == 0 || i == 1) {
                 int which = i == 0 ? LIVE_STAMINA : LIVE_HEALTH;
@@ -1654,6 +1658,9 @@ static void draw_modern_tab_rows(HDC dc, RECT panel, int start_y, int item_h, in
                 else toggle_switch(dc, control_rect, cheat_enabled[which], focused);
             }
             else if (i == 2) toggle_switch(dc, control_rect, ko_state == 1, focused);
+#ifdef UFC4_OVERLAY
+            else if (i == 3) toggle_switch(dc, control_rect, state->unlock_dlc, focused);
+#endif
             else value_chip(dc, control_rect, L"Open", focused, 0);
         } else if (state->topbar_tab == TOPBAR_PHOTO) {
             const wchar_t *pht_items[] = { L"Enter Freecam Photo Mode", L"Freeze Fight Action", L"Visual Effects & Filters...", L"Custom Watermark & Brand...", L"FPV / POV Camera (Beta)", L"FPV Pitch Angle", L"FPV Eye Height", L"FPV Forward / Back", L"FPV Field of View", L"FPV Grapple Auto-Exit" };
@@ -1764,7 +1771,7 @@ static void draw_sideblade_menu(HDC dc, RECT r, const MenuState *state, const Ov
     text(dc, font_stat_label, L"PARSECTAGON", b1, theme->accent, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
     for (int t = 0, slot = 0; t < TOPBAR_COUNT; ++t) {
-        if (!UFC6_ENABLE_LOBBY && t == TOPBAR_LOBBY) continue;
+        if ((!UFC6_ENABLE_LOBBY && t == TOPBAR_LOBBY) || (!UFC6_ENABLE_PHOTO && t == TOPBAR_PHOTO)) continue;
         RECT tb = { rail.left + 10, rail.top + 56 + slot * 50, rail.right - 10, rail.top + 96 + slot * 50 };
         int act = (t == state->topbar_tab);
         if (act) row_surface(dc, tb, style, style == 3 ? 12 : 6, theme->accent, theme->focus_border);
@@ -1814,11 +1821,11 @@ static void draw_bottomdock_menu(HDC dc, RECT r, const MenuState *state, const O
     RECT bn = { dock.left + 44, dock.top, dock.left + 150, dock.bottom };
     text(dc, font_stat_label, OVERLAY_GAME_NAME, bn, theme->accent, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
-    int visible_tabs = UFC6_ENABLE_LOBBY ? TOPBAR_COUNT : (TOPBAR_COUNT - 1);
-    int tab_x = dock.left + 146, tab_w = UFC6_ENABLE_LOBBY ? 84 : 102;
+    int visible_tabs = 4 + UFC6_ENABLE_LOBBY + UFC6_ENABLE_PHOTO;
+    int tab_x = dock.left + 146, tab_w = visible_tabs >= 6 ? 84 : 102;
     controller_artwork_draw(dc, tab_x - 34, dock.top + 12, 28, 22, PAD_LB, ps);
     for (int t = 0, slot = 0; t < TOPBAR_COUNT; ++t) {
-        if (!UFC6_ENABLE_LOBBY && t == TOPBAR_LOBBY) continue;
+        if ((!UFC6_ENABLE_LOBBY && t == TOPBAR_LOBBY) || (!UFC6_ENABLE_PHOTO && t == TOPBAR_PHOTO)) continue;
         RECT tb = { tab_x + slot * (tab_w + 6), dock.top + 9, tab_x + (slot + 1) * tab_w + slot * 6, dock.bottom - 9 };
         int act = (t == state->topbar_tab);
         if (act) row_surface(dc, tb, style, style == 3 ? 14 : 6, theme->accent, theme->focus_border);
@@ -1847,7 +1854,7 @@ static void draw_bento_menu(HDC dc, RECT r, const MenuState *state, const Overla
     text(dc, font_stat_label, L"PARSECTAGON", bn, theme->accent, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
     for (int t = 0, slot = 0; t < TOPBAR_COUNT; ++t) {
-        if (!UFC6_ENABLE_LOBBY && t == TOPBAR_LOBBY) continue;
+        if ((!UFC6_ENABLE_LOBBY && t == TOPBAR_LOBBY) || (!UFC6_ENABLE_PHOTO && t == TOPBAR_PHOTO)) continue;
         RECT tb = { left.left, left.top + 44 + slot * 44, left.right, left.top + 82 + slot * 44 };
         int act = (t == state->topbar_tab);
         row_surface(dc, tb, style, style == 3 ? 12 : 6, act ? theme->accent : RGB(18, 22, 31), act ? theme->focus_border : theme->border);
@@ -1889,9 +1896,9 @@ static void draw_broadcast_menu(HDC dc, RECT r, const MenuState *state, const Ov
     controller_artwork_draw(dc, card.right - 76, card.top + 11, 24, 20, PAD_LB, ps);
     controller_artwork_draw(dc, card.right - 46, card.top + 11, 24, 20, PAD_RB, ps);
 
-    int tx = card.left + 16, tw = UFC6_ENABLE_LOBBY ? 80 : 96;
+    int tx = card.left + 16, tw = (4 + UFC6_ENABLE_LOBBY + UFC6_ENABLE_PHOTO) >= 6 ? 80 : 96;
     for (int t = 0, slot = 0; t < TOPBAR_COUNT; ++t) {
-        if (!UFC6_ENABLE_LOBBY && t == TOPBAR_LOBBY) continue;
+        if ((!UFC6_ENABLE_LOBBY && t == TOPBAR_LOBBY) || (!UFC6_ENABLE_PHOTO && t == TOPBAR_PHOTO)) continue;
         RECT tb = { tx + slot * (tw + 6), card.top + 44, tx + (slot + 1) * tw + slot * 6, card.top + 72 };
         int act = (t == state->topbar_tab);
         row_surface(dc, tb, style, 4, act ? theme->accent : RGB(18, 22, 31), act ? theme->focus_border : theme->border);
@@ -1916,7 +1923,7 @@ static void draw_octagon_menu(HDC dc, RECT r, const MenuState *state, const Over
     text(dc, font_stat_label, L"PARSECTAGON", bn, theme->accent, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
     for (int t = 0, slot = 0; t < TOPBAR_COUNT; ++t) {
-        if (!UFC6_ENABLE_LOBBY && t == TOPBAR_LOBBY) continue;
+        if ((!UFC6_ENABLE_LOBBY && t == TOPBAR_LOBBY) || (!UFC6_ENABLE_PHOTO && t == TOPBAR_PHOTO)) continue;
         RECT tb = { hub.left + 24, hub.top + 56 + slot * 34, hub.right - 24, hub.top + 86 + slot * 34 };
         int act = (t == state->topbar_tab);
         if (act) row_surface(dc, tb, 4, 8, theme->accent, theme->focus_border);
@@ -1963,14 +1970,14 @@ static void draw_topbar_menu(HDC dc, RECT r, const MenuState *state, const Overl
     RECT brand_sub = { bar.left + 44, bar.top + 20, bar.left + 190, bar.bottom - 6 };
     text(dc, font_small, OVERLAY_BRAND_SUB, brand_sub, theme->text, DT_LEFT | DT_TOP | DT_SINGLELINE);
 
-    int visible_tabs = UFC6_ENABLE_LOBBY ? TOPBAR_COUNT : (TOPBAR_COUNT - 1);
+    int visible_tabs = 4 + UFC6_ENABLE_LOBBY + UFC6_ENABLE_PHOTO;
     const wchar_t *tab_names[] = { L"Favorites ▾", L"Actions ▾", L"Lobby ▾", L"Cheats ▾", L"Photo ▾", L"Settings ▾" };
     int tab_start_x = bar.left + (is_island ? 202 : 210);
-    int tab_w = is_island ? (UFC6_ENABLE_LOBBY ? 66 : 80) : (UFC6_ENABLE_LOBBY ? 82 : 98);
+    int tab_w = is_island ? (visible_tabs >= 6 ? 66 : 80) : (visible_tabs >= 6 ? 82 : 98);
     controller_artwork_draw(dc, tab_start_x - 36, bar.top + 13, 30, 24, PAD_LB, ps);
 
     for (int t = 0, slot = 0; t < TOPBAR_COUNT; ++t) {
-        if (!UFC6_ENABLE_LOBBY && t == TOPBAR_LOBBY) continue;
+        if ((!UFC6_ENABLE_LOBBY && t == TOPBAR_LOBBY) || (!UFC6_ENABLE_PHOTO && t == TOPBAR_PHOTO)) continue;
         RECT tab_box = { tab_start_x + slot * (tab_w + 4), bar.top + 11, tab_start_x + (slot + 1) * tab_w + slot * 4, bar.bottom - 11 };
         int active = (t == state->topbar_tab);
         if (active) {
@@ -2252,7 +2259,11 @@ static void draw_menu(HDC dc, RECT r) {
     const wchar_t *performance_labels[]={L"Crowd & animation",L"Particles & sparks",L"Depth of field",L"Dynamic resolution",L"3D render scale",L"Save for next launch",L"Save & restart game...",L"Back"};
     const wchar_t *performance_restart[]={L"Cancel",L"Save and restart game"},*performance_discard[]={L"Keep editing",L"Discard edits"};
     const wchar_t *screenshot_labels[]={L"Open screenshots folder",L"Back"};
+#ifdef UFC4_OVERLAY
+    const wchar_t *cheat_labels[]={L"Infinite stamina",L"No damage",L"Next hit KO",L"Unlock DLC & vanity items",L"Back"};
+#else
     const wchar_t *cheat_labels[]={L"Infinite stamina",L"No damage",L"Next hit KO",L"Add money",L"Add skill points",L"Restore fitness to 100%",L"Refill training days",L"Never get old",L"Training point rewards",L"All sparring grades: A...",L"Max learned moves: 5★...",L"Move XP multiplier",L"Savegame backups...",L"Back"};
+#endif
     wchar_t backup_message[512];int backup_state=BACKUP_READY;
 #ifdef QUIT_MENU_TEST
     if(test_mode)wcscpy(backup_message,L"Test backup page; save files are never touched.");else
@@ -2340,9 +2351,11 @@ static void draw_menu(HDC dc, RECT r) {
                 else if(state.page==PAGE_GAME_ICONS)special=i==4?L"Back":(i==0&&icon_state==GAME_ICONS_XBOX)||(i==1&&icon_state==GAME_ICONS_KEYBOARD)||(i==2&&icon_state==GAME_ICONS_PS)?L"Active":L"Choose";
                 else if(state.page==PAGE_STARTUP)special=i==2?L"Back":i==0?L"Enable":L"Restore";
                 else if(state.page==PAGE_PERFORMANCE){if(i<PERF_SCALE&&state.performance_available){const int flags[]={state.performance.crowd_off,state.performance.particles_off,state.performance.dof_off,state.performance.drs_off};special_toggle=!flags[i];}else if(i==PERF_SCALE){if(state.performance.render_scale)swprintf(detail,80,L"%d%%",state.performance.render_scale);else wcscpy(detail,L"Launcher default");special=detail;special_arrows=1;}else special=i==PERF_BACK?L"Back":L"Save";if(!state.performance_available&&i<PERF_SAVE)special=L"Unavailable";}
-                else if(state.page==PAGE_CHEATS){if(i<2)special_toggle=cheat_enabled[i];else if(i==2)special=ko_state==1?L"Armed / Cancel":L"Arm";else if(i==3||i==4){wchar_t amount[32];format_number(menu_career_amount(&state,i-3),amount);swprintf(detail,80,i==3?L"$%ls":L"%ls",amount);special=detail;special_arrows=1;}else if(i==7)special_toggle=career_state.longevity_requested;else if(i==8){int multiplier=menu_training_multiplier(&state);swprintf(detail,80,multiplier==1?L"1x (Off)":L"%dx",multiplier);special=detail;special_arrows=1;}else if(i==10){special=move_group_label(state.move_group_index);special_arrows=1;}else if(i==11){int multiplier=menu_move_xp_multiplier(&state);swprintf(detail,80,multiplier==1?L"1x (Off)":L"%dx",multiplier);special=detail;special_arrows=1;}else special=i==13?L"Back":L"Open";
+                else if(state.page==PAGE_CHEATS){
 #ifdef UFC4_OVERLAY
-                    if(i>=3&&i<=11){special=L"Unavailable";special_toggle=-1;special_arrows=0;}
+                    if(i<2)special_toggle=cheat_enabled[i];else if(i==2)special=ko_state==1?L"Armed / Cancel":L"Arm";else if(i==3)special_toggle=state.unlock_dlc;else special=L"Back";
+#else
+                    if(i<2)special_toggle=cheat_enabled[i];else if(i==2)special=ko_state==1?L"Armed / Cancel":L"Arm";else if(i==3||i==4){wchar_t amount[32];format_number(menu_career_amount(&state,i-3),amount);swprintf(detail,80,i==3?L"$%ls":L"%ls",amount);special=detail;special_arrows=1;}else if(i==7)special_toggle=career_state.longevity_requested;else if(i==8){int multiplier=menu_training_multiplier(&state);swprintf(detail,80,multiplier==1?L"1x (Off)":L"%dx",multiplier);special=detail;special_arrows=1;}else if(i==10){special=move_group_label(state.move_group_index);special_arrows=1;}else if(i==11){int multiplier=menu_move_xp_multiplier(&state);swprintf(detail,80,multiplier==1?L"1x (Off)":L"%dx",multiplier);special=detail;special_arrows=1;}else special=i==13?L"Back":L"Open";
 #endif
                 }
                 else if(state.page==PAGE_BACKUPS)special=i==2?L"Back":L"Open";
@@ -2566,6 +2579,11 @@ static void draw_menu(HDC dc, RECT r) {
             else{ActionBinding chord={.pad=bindings.actions[state.binding_action].pad};binding_chip(dc,control,&chord,focused,ps,0,NULL);}
         }
         if(state.page==PAGE_THEME&&i<6&&i==bindings.theme_choice)value_chip(dc,control,i==0?paint_theme.name:L"Selected",focused,0);
+#ifdef UFC4_OVERLAY
+        if(state.page==PAGE_CHEATS&&i==3)toggle_switch(dc,control,state.unlock_dlc,focused);
+        if(state.page==PAGE_CHEATS&&i==2)value_chip(dc,control,ko_state==1?L"Armed / Cancel":L"Arm",focused,0);
+        if(state.page==PAGE_CHEATS&&i<2)toggle_switch(dc,control,cheat_enabled[i],focused);
+#else
         if(state.page==PAGE_CHEATS&&i==8){wchar_t factor[32];int multiplier=menu_training_multiplier(&state);swprintf(factor,32,multiplier==1?L"1x (Off)":L"%dx",multiplier);value_chip(dc,control,factor,focused,1);}
         if(state.page==PAGE_CHEATS&&i==10)value_chip(dc,control,move_group_label(state.move_group_index),focused,1);
         if(state.page==PAGE_CHEATS&&i==11){wchar_t factor[32];int multiplier=menu_move_xp_multiplier(&state);swprintf(factor,32,multiplier==1?L"1x (Off)":L"%dx",multiplier);value_chip(dc,control,factor,focused,1);}
@@ -2578,6 +2596,7 @@ static void draw_menu(HDC dc, RECT r) {
             swprintf(value_text,64,pending?L"Pending...":i==3?L"$%ls":L"%ls",amount);
             value_chip(dc,control,value_text,focused,!pending);
         }
+#endif
         if(menu_power_page(&state)&&i==1&&state.shutdown_holding){
             wchar_t progress[40];swprintf(progress,40,L"%.1f / 3 s",state.shutdown_progress/1000.0);
             RECT value={330,row.top+5,r.right-55,row.bottom};text(dc,font_small,progress,value,color,DT_RIGHT|DT_SINGLELINE);
@@ -2647,7 +2666,9 @@ static void draw_menu(HDC dc, RECT r) {
 #endif
         text(dc,font_small,advice_text,advice,RGB(255,207,105),DT_LEFT|DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS);
     }
+#ifndef UFC4_OVERLAY
     if(state.page==PAGE_CHEATS&&first<=3){RECT heading={38,180-32*first,r.right-36,204-32*first};text(dc,font_small,L"Career cheats",heading,paint_theme.muted,DT_LEFT|DT_SINGLELINE);}
+#endif
     if(state.page==PAGE_PERFORMANCE_RESTART||state.page==PAGE_PERFORMANCE_DISCARD){
         RECT explain={36,98,r.right-36,156};text(dc,font_small,state.page==PAGE_PERFORMANCE_RESTART?L"Save your game progress first. Settings are applied at startup.":L"Discarding keeps the settings currently saved in PORTHEON.",explain,paint_theme.muted,DT_LEFT|DT_WORDBREAK);}
     if(state.page==PAGE_STARTUP_CONFIRM){

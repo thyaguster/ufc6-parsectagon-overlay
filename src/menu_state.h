@@ -3,6 +3,13 @@
 #ifndef UFC6_ENABLE_LOBBY
 #define UFC6_ENABLE_LOBBY 1
 #endif
+#ifndef UFC6_ENABLE_PHOTO
+#ifdef UFC4_OVERLAY
+#define UFC6_ENABLE_PHOTO 0
+#else
+#define UFC6_ENABLE_PHOTO 1
+#endif
+#endif
 #include <stdint.h>
 #include "overlay_preferences.h"
 #include "overlay_layout.h"
@@ -93,20 +100,23 @@ static int menu_setting_id(int page,int row){
     static const int appearance[]={SETTING_MASTER_PRESET,SETTING_LAYOUT_STYLE,SETTING_BACKDROP_STYLE,SETTING_THEME,SETTING_SCALE,SETTING_FONT,SETTING_BOX_STYLE,SETTING_WINDOW_SIZE,SETTING_ICONS,SETTING_FAVORITES_FIRST,SETTING_BACK};
     static const int controls[]={SETTING_KEYBINDS,SETTING_GUIDE,SETTING_GAMEBAR,SETTING_ACCESS,SETTING_BACK};
 #ifdef UFC4_OVERLAY
-    static const int game[]={SETTING_UNLOCK_DLC,SETTING_LAUNCHER,SETTING_AUTO_LAUNCH,SETTING_GAME_ICONS,SETTING_SKIP_SPLASHES,SETTING_SUPPRESS_ONLINE_NOTICES,SETTING_STARTUP_PATCH,SETTING_EXPERIMENTAL,SETTING_AUDIO_FOCUS,SETTING_DECISION_REPLAY,SETTING_INSTANT_REPLAY,SETTING_REPLACE_ONLINE,SETTING_BACK};
+    static const int game[]={SETTING_UNLOCK_DLC,SETTING_AUTO_LAUNCH,SETTING_GAME_ICONS,SETTING_SKIP_SPLASHES,SETTING_SUPPRESS_ONLINE_NOTICES,SETTING_AUDIO_FOCUS,SETTING_REPLACE_ONLINE,SETTING_BACK};
+    static const int tools[]={SETTING_SCREENSHOTS,SETTING_SCREENSHOT_UI,SETTING_LINK_PARSECTAGON,SETTING_LINK_DISCORD,SETTING_LINK_GITHUB,SETTING_RESET,SETTING_BACK};
+    static const int experimental[]={SETTING_STARTUP_POPUPS,SETTING_BACK};
 #else
     static const int game[]={SETTING_LAUNCHER,SETTING_AUTO_LAUNCH,SETTING_GAME_ICONS,SETTING_SKIP_SPLASHES,SETTING_SUPPRESS_ONLINE_NOTICES,SETTING_STARTUP_PATCH,SETTING_EXPERIMENTAL,SETTING_AUDIO_FOCUS,SETTING_DECISION_REPLAY,SETTING_INSTANT_REPLAY,SETTING_REPLACE_ONLINE,SETTING_BACK};
-#endif
     static const int tools[]={SETTING_SCREENSHOTS,SETTING_SCREENSHOT_UI,SETTING_UPDATE,SETTING_DIAGNOSTICS,SETTING_LINK_PARSECTAGON,SETTING_LINK_DISCORD,SETTING_LINK_GITHUB,SETTING_RESET,SETTING_BACK};
     static const int experimental[]={SETTING_STARTUP_POPUPS,SETTING_AVATAR_REPAIR,SETTING_AVATAR_ALWAYS,SETTING_BACK};
+#endif
     return page==PAGE_APPEARANCE?appearance[row]:page==PAGE_CONTROLS?controls[row]:page==PAGE_GAME_SETTINGS?game[row]:page==PAGE_TOOLS?tools[row]:page==PAGE_EXPERIMENTAL?experimental[row]:row;
 }
 static void menu_return_setting(MenuState *s,int id){
     s->page=PAGE_SETTINGS;s->selection=id;s->armed=0;if(s->settings_legacy)return;
-    if(id==SETTING_STARTUP_POPUPS||id==SETTING_AVATAR_REPAIR||id==SETTING_AVATAR_ALWAYS){s->page=PAGE_EXPERIMENTAL;s->selection=id==SETTING_STARTUP_POPUPS?0:id==SETTING_AVATAR_REPAIR?1:2;return;}
 #ifdef UFC4_OVERLAY
-    const int pages[]={PAGE_APPEARANCE,PAGE_CONTROLS,PAGE_GAME_SETTINGS,PAGE_TOOLS},counts[]={10,4,12,8};
+    if(id==SETTING_STARTUP_POPUPS){s->page=PAGE_EXPERIMENTAL;s->selection=0;return;}
+    const int pages[]={PAGE_APPEARANCE,PAGE_CONTROLS,PAGE_GAME_SETTINGS,PAGE_TOOLS},counts[]={10,4,7,6};
 #else
+    if(id==SETTING_STARTUP_POPUPS||id==SETTING_AVATAR_REPAIR||id==SETTING_AVATAR_ALWAYS){s->page=PAGE_EXPERIMENTAL;s->selection=id==SETTING_STARTUP_POPUPS?0:id==SETTING_AVATAR_REPAIR?1:2;return;}
     const int pages[]={PAGE_APPEARANCE,PAGE_CONTROLS,PAGE_GAME_SETTINGS,PAGE_TOOLS},counts[]={10,4,11,8};
 #endif
     for(int p=0;p<4;++p)for(int i=0;i<counts[p];++i)if(menu_setting_id(pages[p],i)==id){s->page=pages[p];s->selection=i;return;}
@@ -114,9 +124,11 @@ static void menu_return_setting(MenuState *s,int id){
 }
 static int topbar_next_tab(int current,int dir){
     int next=(current+TOPBAR_COUNT+dir)%TOPBAR_COUNT;
-#if !UFC6_ENABLE_LOBBY
-    if(next==TOPBAR_LOBBY)next=(next+TOPBAR_COUNT+dir)%TOPBAR_COUNT;
-#endif
+    for(int k=0;k<TOPBAR_COUNT;++k){
+        if((!UFC6_ENABLE_LOBBY&&next==TOPBAR_LOBBY)||(!UFC6_ENABLE_PHOTO&&next==TOPBAR_PHOTO))
+            next=(next+TOPBAR_COUNT+dir)%TOPBAR_COUNT;
+        else break;
+    }
     return next;
 }
 static int topbar_tab_rows(int tab){
@@ -213,11 +225,29 @@ static int menu_rows(const MenuState *s) {
     if(s->page==PAGE_FAVORITE_SEARCH){int ids[FAV_CATALOG_COUNT];return 3+fav_filter_items(s->fav_search_category,s->fav_search_query,ids,FAV_CATALOG_COUNT);}
     return s->page==PAGE_FIGHT_REPORT?4:s->page==PAGE_LOBBY_HOME?8:s->page==PAGE_STREAM_PRESETS?5:s->page==PAGE_HOST_FIGHT?7:s->page==PAGE_LOBBY?8+s->lobby_room_count:s->page==PAGE_LOBBY_ACCOUNT?3:s->page==PAGE_WELCOME?1:s->page==PAGE_STARTUP?3:s->page==PAGE_STARTUP_CONFIRM||s->page==PAGE_AVATAR_REPAIR||s->page==PAGE_AVATAR_ALWAYS?2:s->page==PAGE_PERFORMANCE?PERF_ROWS:s->page==PAGE_PERFORMANCE_RESTART||s->page==PAGE_PERFORMANCE_DISCARD?2:s->page==PAGE_PHOTO_EFFECTS?FX_ROWS:s->page==PAGE_PHOTO_WATERMARK?MARK_ROWS:s->page==PAGE_PHOTO?12:s->page==PAGE_PHOTO_CONTROLS?12:s->page==PAGE_SETTINGS_HOME?7:s->page==PAGE_APPEARANCE?11:s->page==PAGE_CONTROLS?5:s->page==PAGE_GAME_SETTINGS?(
 #ifdef UFC4_OVERLAY
-13
+8
 #else
 12
 #endif
-):s->page==PAGE_TOOLS?9:s->page==PAGE_EXPERIMENTAL?4:s->page==PAGE_KEYBINDS?(BIND_COUNT+1):s->page==PAGE_BINDING?5:s->page==PAGE_THEME?7:s->page==PAGE_MAIN?MAIN_COUNT:s->page==PAGE_SETTINGS?SETTING_COUNT:s->page==PAGE_CHEATS?14:s->page==PAGE_BACKUPS?3:s->page==PAGE_GAME_ICONS?5:s->shutdown_countdown?1:2;
+):s->page==PAGE_TOOLS?(
+#ifdef UFC4_OVERLAY
+7
+#else
+9
+#endif
+):s->page==PAGE_EXPERIMENTAL?(
+#ifdef UFC4_OVERLAY
+2
+#else
+4
+#endif
+):s->page==PAGE_KEYBINDS?(BIND_COUNT+1):s->page==PAGE_BINDING?5:s->page==PAGE_THEME?7:s->page==PAGE_MAIN?MAIN_COUNT:s->page==PAGE_SETTINGS?SETTING_COUNT:s->page==PAGE_CHEATS?(
+#ifdef UFC4_OVERLAY
+5
+#else
+14
+#endif
+):s->page==PAGE_BACKUPS?3:s->page==PAGE_GAME_ICONS?5:s->shutdown_countdown?1:2;
 }
 static int lobby_grid_columns(const MenuState *s){return s->online_takeover&&s->lobby_columns>=3?s->lobby_columns:2;}
 static int lobby_columns_for_viewport(uint32_t width){return width>=2200?4:width>=1700?3:2;}
@@ -702,6 +732,13 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
         return add?MENU_CAREER_ADD:MENU_CHANGED;
     }
     if(s->page==PAGE_CHEATS){
+#ifdef UFC4_OVERLAY
+        if(s->selection<2&&(button==PAD_A||button==PAD_LEFT||button==PAD_RIGHT)){s->armed=0;return s->selection==0?MENU_CHEAT_STAMINA:MENU_CHEAT_HEALTH;}
+        if(s->selection==2&&button==PAD_A){s->armed=0;return MENU_NEXT_HIT_KO;}
+        if(s->selection==3&&(button==PAD_A||button==PAD_LEFT||button==PAD_RIGHT)){s->unlock_dlc=!s->unlock_dlc;return MENU_UNLOCK_DLC_CHANGED;}
+        if(s->selection==4&&button==PAD_A){s->page=PAGE_MAIN;s->selection=MAIN_CHEATS;s->armed=0;return MENU_CHANGED;}
+        return MENU_NONE;
+#else
         if(s->selection==2&&button==PAD_A){s->armed=0;return MENU_NEXT_HIT_KO;}
         if(s->selection>=3&&s->selection<=4){
             int kind=s->selection-3;
@@ -723,6 +760,7 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
         if(s->selection==12&&button==PAD_A){s->page=PAGE_BACKUPS;s->selection=0;s->armed=0;return MENU_BACKUP_OPEN;}
         if(s->selection==13&&button==PAD_A){s->page=PAGE_MAIN;s->selection=MAIN_CHEATS;s->armed=0;return MENU_CHANGED;}
         return MENU_NONE;
+#endif
     }
     if(s->page==PAGE_SETTINGS) {
         if(s->selection==SETTING_MASTER_PRESET&&(button==PAD_A||button==PAD_LEFT||button==PAD_RIGHT)){
@@ -895,7 +933,11 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
                 if(s->selection==0)return MENU_CHEAT_STAMINA;
                 if(s->selection==1)return MENU_CHEAT_HEALTH;
                 if(s->selection==2)return MENU_NEXT_HIT_KO;
+#ifdef UFC4_OVERLAY
+                if(s->selection==3){s->unlock_dlc=!s->unlock_dlc;return MENU_UNLOCK_DLC_CHANGED;}
+#else
                 if(s->selection==3){s->page=PAGE_CHEATS;s->selection=0;s->armed=0;return MENU_CHANGED;}
+#endif
                 if(s->selection==4){s->page=PAGE_BACKUPS;s->selection=0;s->armed=0;return MENU_BACKUP_OPEN;}
                 break;
             case TOPBAR_PHOTO:
