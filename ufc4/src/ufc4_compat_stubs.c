@@ -28,16 +28,45 @@
 #include "photo_effects.h"
 
 /* --- Live Cheats (backed by ufc4_live_cheats.c) --- */
-static int u4_stam_ready, u4_dmg_ready, u4_ko_ready;
+static int u4_stam_ready, u4_dmg_ready, u4_ko_ready, u4_dlc_unlocked;
+static uintptr_t u4_guest_base = (uintptr_t)0x800000000ULL;
+
+static int ufc4_patch_guest(uintptr_t addr, const unsigned char *sig, size_t sig_len, size_t patch_off, const unsigned char *patch, size_t patch_len) {
+    unsigned char buf[32];
+    SIZE_T got = 0;
+    if (sig_len > sizeof(buf) || !ReadProcessMemory(GetCurrentProcess(), (const void *)addr, buf, sig_len, &got) || got != sig_len) return 0;
+    if (memcmp(buf + patch_off, patch, patch_len) == 0) return 1;
+    if (memcmp(buf, sig, sig_len) != 0) return 0;
+    DWORD old_prot = 0;
+    if (!VirtualProtect((void *)(addr + patch_off), patch_len, PAGE_EXECUTE_READWRITE, &old_prot)) return 0;
+    memcpy((void *)(addr + patch_off), patch, patch_len);
+    VirtualProtect((void *)(addr + patch_off), patch_len, old_prot, &old_prot);
+    FlushInstructionCache(GetCurrentProcess(), (const void *)(addr + patch_off), patch_len);
+    return 1;
+}
+
+static void ufc4_unlock_dlc_fighters(void) {
+    if (u4_dlc_unlocked) return;
+    static const unsigned char sig_fn[18] = {0x4c,0x8d,0x2d,0x58,0xee,0x42,0x01,0x84,0xc0,0x4c,0x89,0xbd,0xb8,0xfd,0xff,0xff,0x74,0x68};
+    static const unsigned char pat_fn[2]  = {0xeb,0x68};
+    static const unsigned char sig_dl[16] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x54,0x53,0x48,0x83,0xec,0x20,0x4c};
+    static const unsigned char pat_dl[3]  = {0xb0,0x01,0xc3};
+    int ok1 = ufc4_patch_guest(u4_guest_base + 0x00ac9e28ULL, sig_fn, sizeof(sig_fn), 16, pat_fn, sizeof(pat_fn));
+    int ok2 = ufc4_patch_guest(u4_guest_base + 0x00a920c0ULL, sig_dl, sizeof(sig_dl), 0, pat_dl, sizeof(pat_dl));
+    if (ok1 && ok2) u4_dlc_unlocked = 1;
+}
+
 void live_cheats_init(LiveCheats *state, uintptr_t guest_base) {
-    (void)guest_base;
+    if (guest_base) u4_guest_base = guest_base;
     if (state) memset(state, 0, sizeof(*state));
+    ufc4_unlock_dlc_fighters();
     u4_stam_ready = ufc4_live_stamina_prepare();
     u4_dmg_ready = ufc4_live_damage_prepare();
     u4_ko_ready = ufc4_live_ko_prepare();
 }
 void live_cheats_tick(LiveCheats *state) {
     if (!state) return;
+    ufc4_unlock_dlc_fighters();
     if (!u4_stam_ready) u4_stam_ready = ufc4_live_stamina_prepare();
     if (!u4_dmg_ready) u4_dmg_ready = ufc4_live_damage_prepare();
     if (!u4_ko_ready) u4_ko_ready = ufc4_live_ko_prepare();

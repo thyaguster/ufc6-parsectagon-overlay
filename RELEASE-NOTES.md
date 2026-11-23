@@ -1,3 +1,7 @@
+## v0.9.92 — UFC 4 DLC Fighter Unlocker
+
+- **UFC 4 Unlock DLC Fighters:** Automatically unlocks locked DLC / pre-order fighters (Bruce Lee, Anthony Joshua, Tyson Fury, etc.) in Fight Now and DLC fighter checks (`ufc4_actions_core.dll` via `ufc4_compat_stubs.c`).
+
 ## v0.9.91 — UFC 4 Overlay Integration & Multi-Game Setup Selector
 
 - **Multi-Game Setup Selector (`UFC 6` & `UFC 4`):** Added per-game checkboxes and folder selectors to `UFC6ParsectagonOverlaySetup.exe` so users can enable or disable **UFC 6** and **UFC 4** independently for installation, update, repair, and removal. Selecting `PORTHEON\games` or a game folder auto-detects both games when present.
