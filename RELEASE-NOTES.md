@@ -1,3 +1,9 @@
+## v0.9.93 — UFC 4 DLC & Vanity Unlocker + Online Menu Lobby
+
+- **UFC 4 DLC & Vanity Unlocker + Switch:** Added all 34 vanity clothing, hat, tattoo, and accessory patches alongside the 4 DLC fighter/item patches, auto-resolving UFC 4's `guest_base`. Added **Unlock DLC & vanity items** in **Settings > Game & launcher** (On by default, saved as `UnlockDlcVanity` in `ufc4-quit-menu.ini`, live On/Off toggle in memory).
+- **UFC 4 Online Menu Parsectagon Takeover:** Enabled **Replace Online tab with Parsectagon** in UFC 4 and matched UFC 4's Online Modes screen so entering **Online** opens the Parsectagon lobby.
+- **UFC 6 Lobby Enabled:** Built with `UFC6_ENABLE_LOBBY=1` (`dist/version.dll`).
+
 ## v0.9.92 — UFC 4 DLC Fighter Unlocker
 
 - **UFC 4 Unlock DLC Fighters:** Automatically unlocks locked DLC / pre-order fighters (Bruce Lee, Anthony Joshua, Tyson Fury, etc.) in Fight Now and DLC fighter checks (`ufc4_actions_core.dll` via `ufc4_compat_stubs.c`).
