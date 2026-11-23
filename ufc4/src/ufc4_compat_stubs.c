@@ -28,51 +28,161 @@
 #include "photo_effects.h"
 
 /* --- Live Cheats (backed by ufc4_live_cheats.c) --- */
-static int u4_stam_ready, u4_dmg_ready, u4_ko_ready, u4_dlc_unlocked;
-static uintptr_t u4_guest_base = (uintptr_t)0x800000000ULL;
+static int u4_stam_ready, u4_dmg_ready, u4_ko_ready, u4_unlock_enabled = 1, u4_unlock_applied = -1, u4_unlock_logged;
+static uintptr_t u4_guest_base = 0;
 
-static int ufc4_patch_guest(uintptr_t addr, const unsigned char *sig, size_t sig_len, size_t patch_off, const unsigned char *patch, size_t patch_len) {
+static void ufc4_log_unlock(const char *msg) {
+    wchar_t path[MAX_PATH];
+    HMODULE mod = NULL;
+    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           (LPCWSTR)ufc4_log_unlock, &mod) &&
+        GetModuleFileNameW(mod, path, MAX_PATH)) {
+        wchar_t *slash = wcsrchr(path, L'\\');
+        if (slash) {
+            wcscpy_s(slash + 1, MAX_PATH - (size_t)(slash + 1 - path), L"ufc4-quit-menu.log");
+            FILE *f = _wfopen(path, L"a");
+            if (f) { fprintf(f, "%s\n", msg); fclose(f); }
+        }
+    }
+}
+
+static int ufc4_matches_at(uintptr_t base, uintptr_t offset, const unsigned char *sig, size_t sig_len) {
     unsigned char buf[32];
     SIZE_T got = 0;
+    return sig_len <= sizeof(buf) &&
+           ReadProcessMemory(GetCurrentProcess(), (const void *)(base + offset), buf, sig_len, &got) &&
+           got == sig_len && memcmp(buf, sig, sig_len) == 0;
+}
+
+static uintptr_t ufc4_resolve_guest_base(uintptr_t hint) {
+    static const unsigned char sig_fn[16] = {0x4c,0x8d,0x2d,0x58,0xee,0x42,0x01,0x84,0xc0,0x4c,0x89,0xbd,0xb8,0xfd,0xff,0xff};
+    static const uintptr_t cands[] = {0x800000000ULL, 0x900000000ULL, 0x1000000000ULL};
+    if (u4_guest_base) return u4_guest_base;
+    if (ufc4_matches_at(0x800000000ULL, 0x00ac9e28ULL, sig_fn, sizeof(sig_fn))) return (u4_guest_base = 0x800000000ULL);
+    if (hint && ufc4_matches_at(hint, 0x00ac9e28ULL, sig_fn, sizeof(sig_fn))) return (u4_guest_base = hint);
+    for (size_t i = 0; i < sizeof(cands) / sizeof(cands[0]); ++i) {
+        if (ufc4_matches_at(cands[i], 0x00ac9e28ULL, sig_fn, sizeof(sig_fn))) return (u4_guest_base = cands[i]);
+    }
+    SYSTEM_INFO si;
+    GetSystemInfo(&si);
+    uintptr_t at = (uintptr_t)si.lpMinimumApplicationAddress;
+    uintptr_t lim = (uintptr_t)si.lpMaximumApplicationAddress;
+    while (at < lim) {
+        MEMORY_BASIC_INFORMATION mbi;
+        if (!VirtualQuery((const void *)at, &mbi, sizeof(mbi))) break;
+        uintptr_t end = (uintptr_t)mbi.BaseAddress + mbi.RegionSize;
+        if (end <= at) break;
+        if (mbi.State == MEM_COMMIT && mbi.RegionSize >= 0x01000000ULL && (mbi.Protect & 0xff) != PAGE_NOACCESS) {
+            uintptr_t base = (uintptr_t)mbi.BaseAddress;
+            if (ufc4_matches_at(base, 0x00ac9e28ULL, sig_fn, sizeof(sig_fn))) return (u4_guest_base = base);
+        }
+        at = end;
+    }
+    return 0;
+}
+
+static int ufc4_patch_guest_toggle(uintptr_t addr, const unsigned char *sig, size_t sig_len, size_t patch_off, const unsigned char *patch, size_t patch_len, int enable) {
+    unsigned char buf[32];
+    SIZE_T got = 0;
+    const unsigned char *want = enable ? patch : (sig + patch_off);
+    const unsigned char *other = enable ? (sig + patch_off) : patch;
     if (sig_len > sizeof(buf) || !ReadProcessMemory(GetCurrentProcess(), (const void *)addr, buf, sig_len, &got) || got != sig_len) return 0;
-    if (memcmp(buf + patch_off, patch, patch_len) == 0) return 1;
-    if (memcmp(buf, sig, sig_len) != 0) return 0;
+    if (memcmp(buf + patch_off, want, patch_len) == 0) return 1;
+    if (enable && memcmp(buf, sig, sig_len) != 0) return 0;
+    if (!enable && memcmp(buf + patch_off, other, patch_len) != 0) return 0;
     DWORD old_prot = 0;
     if (!VirtualProtect((void *)(addr + patch_off), patch_len, PAGE_EXECUTE_READWRITE, &old_prot)) return 0;
-    memcpy((void *)(addr + patch_off), patch, patch_len);
+    memcpy((void *)(addr + patch_off), want, patch_len);
     VirtualProtect((void *)(addr + patch_off), patch_len, old_prot, &old_prot);
     FlushInstructionCache(GetCurrentProcess(), (const void *)(addr + patch_off), patch_len);
     return 1;
 }
 
-static void ufc4_unlock_dlc_fighters(void) {
-    if (u4_dlc_unlocked) return;
-    static const unsigned char sig_fn[18]  = {0x4c,0x8d,0x2d,0x58,0xee,0x42,0x01,0x84,0xc0,0x4c,0x89,0xbd,0xb8,0xfd,0xff,0xff,0x74,0x68};
-    static const unsigned char pat_fn[2]   = {0xeb,0x68};
-    static const unsigned char sig_dl[16]  = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x54,0x53,0x48,0x83,0xec,0x20,0x4c};
-    static const unsigned char pat_dl[3]   = {0xb0,0x01,0xc3};
-    static const unsigned char sig_car[16] = {0x48,0x8b,0x78,0x10,0x8b,0x70,0x18,0x48,0x8b,0x07,0xff,0x90,0x00,0x01,0x00,0x00};
-    static const unsigned char pat_car[6]  = {0xb8,0x01,0x00,0x00,0x00,0x90};
-    static const unsigned char sig_itm[7]  = {0x48,0x83,0x7b,0x50,0x00,0x74,0x4a};
-    static const unsigned char pat_itm[7]  = {0xb0,0x01,0xeb,0x29,0x90,0x90,0x90};
-    int ok1 = ufc4_patch_guest(u4_guest_base + 0x00ac9e28ULL, sig_fn, sizeof(sig_fn), 16, pat_fn, sizeof(pat_fn));
-    int ok2 = ufc4_patch_guest(u4_guest_base + 0x00a920c0ULL, sig_dl, sizeof(sig_dl), 0, pat_dl, sizeof(pat_dl));
-    int ok3 = ufc4_patch_guest(u4_guest_base + 0x008db890ULL, sig_car, sizeof(sig_car), 10, pat_car, sizeof(pat_car));
-    int ok4 = ufc4_patch_guest(u4_guest_base + 0x00a42278ULL, sig_itm, sizeof(sig_itm), 0, pat_itm, sizeof(pat_itm));
-    if (ok1 && ok2 && ok3 && ok4) u4_dlc_unlocked = 1;
+typedef struct {
+    uintptr_t offset;
+    size_t sig_len;
+    unsigned char sig[18];
+    size_t patch_off;
+    size_t patch_len;
+    unsigned char patch[12];
+} Ufc4GuestPatch;
+
+static void ufc4_sync_unlocks(void) {
+    int enable = u4_unlock_enabled ? 1 : 0;
+    if (u4_unlock_applied == enable) return;
+    if (!u4_guest_base && !ufc4_resolve_guest_base(0)) return;
+    static const Ufc4GuestPatch kUnlockPatches[] = {
+        {0x00ac9e28ULL, 18, {0x4c,0x8d,0x2d,0x58,0xee,0x42,0x01,0x84,0xc0,0x4c,0x89,0xbd,0xb8,0xfd,0xff,0xff,0x74,0x68}, 16,  2, {0xeb,0x68}},
+        {0x00a920c0ULL, 16, {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x54,0x53,0x48,0x83,0xec,0x20,0x4c},  0,  3, {0xb0,0x01,0xc3}},
+        {0x008db890ULL, 16, {0x48,0x8b,0x78,0x10,0x8b,0x70,0x18,0x48,0x8b,0x07,0xff,0x90,0x00,0x01,0x00,0x00}, 10,  6, {0xb8,0x01,0x00,0x00,0x00,0x90}},
+        {0x00a42278ULL,  7, {0x48,0x83,0x7b,0x50,0x00,0x74,0x4a},                                               0,  7, {0xb0,0x01,0xeb,0x29,0x90,0x90,0x90}},
+        {0x009d175cULL,  6, {0x0f,0x84,0x5e,0xff,0xff,0xff},  0,  6, {0x90,0x90,0x90,0x90,0x90,0x90}},
+        {0x009d1842ULL,  6, {0x0f,0x87,0x78,0xfe,0xff,0xff},  0,  6, {0x90,0x90,0x90,0x90,0x90,0x90}},
+        {0x009d3ec0ULL,  3, {0x55,0x48,0x89},                 0,  3, {0x31,0xc0,0xc3}},
+        {0x00a658c4ULL,  6, {0x0f,0x85,0x2f,0x01,0x00,0x00},  0,  6, {0x90,0x90,0x90,0x90,0x90,0x90}},
+        {0x00a658fdULL,  2, {0x74,0x1a},                      0,  2, {0x90,0x90}},
+        {0x00a65917ULL,  2, {0x74,0x15},                      0,  2, {0xeb,0x15}},
+        {0x00a65924ULL,  5, {0xba,0x01,0x00,0x00,0x00},       0,  5, {0x31,0xd2,0x90,0x90,0x90}},
+        {0x00a65ccbULL, 12, {0x48,0x8b,0x38,0xe8,0x0d,0xda,0x69,0xff,0x84,0xc0,0x74,0x39},
+                         0, 12, {0x48,0x8b,0x38,0xc6,0x47,0x18,0x00,0xeb,0x3c,0x90,0x90,0x90}},
+        {0x00a71372ULL,  2, {0x74,0x14},                      0,  2, {0x90,0x90}},
+        {0x00a71386ULL,  2, {0x75,0xec},                      0,  2, {0xeb,0xec}},
+        {0x00a717d2ULL,  2, {0x31,0xc0},                      0,  2, {0xb0,0x01}},
+        {0x00ad4fc0ULL,  2, {0x74,0x0e},                      0,  2, {0x90,0x90}},
+        {0x00a8aebdULL,  6, {0x0f,0x84,0x2d,0xff,0xff,0xff},  0,  6, {0xe9,0x2e,0xff,0xff,0xff,0x90}},
+        {0x00ae7c7aULL,  3, {0x0f,0xb6,0xd0},                 0,  3, {0x31,0xd2,0x90}},
+        {0x00ae7cb1ULL,  3, {0x0f,0xb6,0xd0},                 0,  3, {0x31,0xd2,0x90}},
+        {0x00ae84fdULL,  3, {0x0f,0xb6,0xd0},                 0,  3, {0x31,0xd2,0x90}},
+        {0x00ae8539ULL,  3, {0x0f,0xb6,0xd0},                 0,  3, {0x31,0xd2,0x90}},
+        {0x00ae0404ULL,  3, {0x0f,0xb6,0xd0},                 0,  3, {0x31,0xd2,0x90}},
+        {0x00ae0440ULL,  3, {0x0f,0xb6,0xd0},                 0,  3, {0x31,0xd2,0x90}},
+        {0x00a6e61aULL,  5, {0xba,0x01,0x00,0x00,0x00},       0,  5, {0x31,0xd2,0x90,0x90,0x90}},
+        {0x00a6e639ULL,  5, {0xba,0x01,0x00,0x00,0x00},       0,  5, {0x31,0xd2,0x90,0x90,0x90}},
+        {0x00a7166fULL,  5, {0xba,0x01,0x00,0x00,0x00},       0,  5, {0x31,0xd2,0x90,0x90,0x90}},
+        {0x00a71689ULL,  5, {0xba,0x01,0x00,0x00,0x00},       0,  5, {0x31,0xd2,0x90,0x90,0x90}},
+        {0x0027f761ULL,  2, {0x75,0x38},                      0,  2, {0xeb,0x38}},
+        {0x0027f9d6ULL,  2, {0x75,0x31},                      0,  2, {0xeb,0x31}},
+        {0x0027fa90ULL,  3, {0x55,0x48,0x89},                 0,  3, {0xb0,0x01,0xc3}},
+        {0x0027da68ULL,  2, {0x75,0x26},                      0,  2, {0x90,0x90}},
+        {0x0027da8dULL,  2, {0x74,0x53},                      0,  2, {0xeb,0x53}},
+        {0x008e43a1ULL,  3, {0x0f,0xb6,0xc0},                 0,  3, {0xb0,0x01,0x90}},
+        {0x009894caULL,  3, {0x0f,0xb6,0xd0},                 0,  3, {0xb2,0x01,0x90}},
+        {0x008e4328ULL,  2, {0x74,0x53},                      0,  2, {0xeb,0x26}},
+        {0x008e4531ULL,  6, {0x0f,0x84,0x94,0x00,0x00,0x00},  0,  6, {0xeb,0x2c,0x90,0x90,0x90,0x90}},
+        {0x009d1410ULL,  3, {0x48,0x8b,0xbf},                 0,  3, {0xb0,0x01,0xc3}},
+        {0x009d1420ULL,  6, {0x48,0x8b,0xbf,0xb8,0x00,0x00},  0,  6, {0xb8,0x01,0x00,0x00,0x00,0xc3}},
+    };
+    int ok_count = 0;
+    size_t total = sizeof(kUnlockPatches) / sizeof(kUnlockPatches[0]);
+    for (size_t i = 0; i < total; ++i) {
+        const Ufc4GuestPatch *p = &kUnlockPatches[i];
+        if (ufc4_patch_guest_toggle(u4_guest_base + p->offset, p->sig, p->sig_len, p->patch_off, p->patch, p->patch_len, enable)) ++ok_count;
+    }
+    if (ok_count == (int)total) u4_unlock_applied = enable;
+    if (!u4_unlock_logged) {
+        char msg[128];
+        snprintf(msg, sizeof(msg), "UFC4 unlock: guest_base=0x%llx enabled=%d applied=%d/%zu", (unsigned long long)u4_guest_base, enable, ok_count, total);
+        ufc4_log_unlock(msg);
+        u4_unlock_logged = 1;
+    }
+}
+
+void ufc4_set_unlock_enabled(int enabled) {
+    u4_unlock_enabled = enabled ? 1 : 0;
+    if (u4_guest_base) ufc4_sync_unlocks();
 }
 
 void live_cheats_init(LiveCheats *state, uintptr_t guest_base) {
-    if (guest_base) u4_guest_base = guest_base;
+    ufc4_resolve_guest_base(guest_base);
     if (state) memset(state, 0, sizeof(*state));
-    ufc4_unlock_dlc_fighters();
+    ufc4_sync_unlocks();
     u4_stam_ready = ufc4_live_stamina_prepare();
     u4_dmg_ready = ufc4_live_damage_prepare();
     u4_ko_ready = ufc4_live_ko_prepare();
 }
 void live_cheats_tick(LiveCheats *state) {
     if (!state) return;
-    ufc4_unlock_dlc_fighters();
+    ufc4_sync_unlocks();
     if (!u4_stam_ready) u4_stam_ready = ufc4_live_stamina_prepare();
     if (!u4_dmg_ready) u4_dmg_ready = ufc4_live_damage_prepare();
     if (!u4_ko_ready) u4_ko_ready = ufc4_live_ko_prepare();

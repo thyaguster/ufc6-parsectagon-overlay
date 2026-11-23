@@ -342,12 +342,15 @@ static VkResult VKAPI_CALL menu_present(VkQueue queue,const VkPresentInfoKHR *in
     image_transition(d,s,f,index,current_layout,fx||readback||tab_probe?VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:overlay_layout);current_layout=fx||readback||tab_probe?VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:overlay_layout;
     if(readback&&(!fx||probe))record_readback(d,s,f,index,fx?raw_probe.buffer:shot.buffer);
     if(tab_probe){
-        uint32_t y=(uint32_t)((uint64_t)s->extent.height*72/1440);
-        for(uint32_t i=0;i<7;++i){
+        uint32_t y=(uint32_t)((uint64_t)s->extent.height*420/1440);
+        for(uint32_t i=0;i<6;++i){
             VkBufferImageCopy sample={.bufferOffset=i*4,.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},
-                .imageOffset={(int32_t)((uint64_t)s->extent.width*(670+i*10)/2560),(int32_t)y,0},.imageExtent={1,1,1}};
+                .imageOffset={(int32_t)((uint64_t)s->extent.width*(460+i*28)/2560),(int32_t)y,0},.imageExtent={1,1,1}};
             d->CmdCopyImageToBuffer(f->command,s->images[index],VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,tab_shot.buffer,1,&sample);
         }
+        VkBufferImageCopy badge={.bufferOffset=24,.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},
+            .imageOffset={(int32_t)((uint64_t)s->extent.width*1178/2560),(int32_t)((uint64_t)s->extent.height*252/1440),0},.imageExtent={1,1,1}};
+        d->CmdCopyImageToBuffer(f->command,s->images[index],VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,tab_shot.buffer,1,&badge);
         VkBufferMemoryBarrier host={.sType=VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT,
             .dstAccessMask=VK_ACCESS_HOST_READ_BIT,.srcQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,.buffer=tab_shot.buffer,.size=VK_WHOLE_SIZE};

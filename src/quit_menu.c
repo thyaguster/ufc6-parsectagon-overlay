@@ -67,6 +67,7 @@ static uintptr_t engine_new_button_rva(void){return 0;}
 extern void ufc4_start_report_watcher(void);
 extern void ufc4_install_sdl_hooks(int (*is_open)(void));
 extern int ufc4_sync_skip_movies(int change);
+extern void ufc4_set_unlock_enabled(int enabled);
 #define OVERLAY_GAME_NAME L"UFC 4"
 #define OVERLAY_BRAND_SUB L"UFC 4 OVERLAY"
 #define OVERLAY_APP_TITLE L"UFC 4 Parsectagon Overlay"
@@ -371,7 +372,7 @@ static int ufc4_row_unavailable(int page,int index,int setting_id){
     if(page==PAGE_MAIN&&index==MAIN_PHOTO)return 1;
     if(setting_id==SETTING_LAUNCHER||setting_id==SETTING_AVATAR_REPAIR||setting_id==SETTING_AVATAR_ALWAYS||
        setting_id==SETTING_DECISION_REPLAY||setting_id==SETTING_INSTANT_REPLAY||setting_id==SETTING_STARTUP_PATCH||
-       setting_id==SETTING_REPLACE_ONLINE||setting_id==SETTING_UPDATE||setting_id==SETTING_DIAGNOSTICS)return 1;
+       setting_id==SETTING_UPDATE||setting_id==SETTING_DIAGNOSTICS)return 1;
 #else
     (void)page;(void)index;(void)setting_id;
 #endif
@@ -527,12 +528,22 @@ __declspec(dllexport) BOOL Ufc6OnlineTabProbeRequest(void){
 __declspec(dllexport) void Ufc6OnlineTabFrame(const void *pixels,BOOL rgba){
     if(!pixels)return;
     if(!InterlockedExchange(&online_frame_logged,1))log_line("Online tab Vulkan frame probe active.");
-    const unsigned char *p=pixels;int gold=0;
+    const unsigned char *p=pixels;int match=0;
+#ifdef UFC4_OVERLAY
+    for(int i=0;i<6;++i){
+        int red=p[i*4+(rgba?0:2)],green=p[i*4+1],blue=p[i*4+(rgba?2:0)];
+        if(green>180&&green>red+60&&blue>100)++match;
+    }
+    int br=p[24+(rgba?0:2)],bg=p[25],bb=p[24+(rgba?2:0)];
+    int badge_ok=(br>150&&bg<55&&bb<55&&br>bg+100&&br>bb+100);
+    InterlockedExchange(&online_frame_selected,match>=4&&badge_ok);
+#else
     for(int i=0;i<7;++i){
         int red=p[i*4+(rgba?0:2)],green=p[i*4+1],blue=p[i*4+(rgba?2:0)];
-        if(red>160&&green>65&&blue<100&&red>green+50&&green>blue+25)++gold;
+        if(red>160&&green>65&&blue<100&&red>green+50&&green>blue+25)++match;
     }
-    InterlockedExchange(&online_frame_selected,gold>=5);
+    InterlockedExchange(&online_frame_selected,match>=5);
+#endif
     InterlockedExchange(&online_frame_tick,(LONG)GetTickCount());
 }
 static int online_tab_selected(void){
@@ -693,7 +704,7 @@ static void button_icon(HDC dc,int x,int y,int back,int playstation){controller_
 static void dpad_icon(HDC dc,int x,int y,int ps){controller_artwork_draw(dc,x,y,30,30,0,ps);}
 static const wchar_t *menu_overlay_icons_label(int style){return style==OVERLAY_ICONS_PLAYSTATION?L"PlayStation":style==OVERLAY_ICONS_KEYBOARD?L"Keyboard":L"Xbox";}
 static void save_settings(void) {
-    EnterCriticalSection(&lock); int training_setting=menu_training_multiplier(&menu),move_xp_setting=menu_move_xp_multiplier(&menu),longevity_setting=career.longevity_requested,ps=menu.playstation_icons,scale=menu_scale(&menu),auto_launch=menu_auto_launch(&menu),guide_enabled=menu_guide_enabled(&menu),startup_popups=menu.startup_popups,skip_splashes=menu.skip_splashes,suppress_online_notices=menu.suppress_online_notices,first_only=menu.first_player_only,include_ui=menu.screenshot_include_ui,mute_background=menu.mute_background,decision_replays=menu.decision_replays,instant_replay=menu.instant_replay,replay_step=menu.replay_step_index,replace_online=menu.replace_online_tab,open_fav_first=menu.open_favorites_first,fav_count=menu.favorite_count,fav_ids[MENU_MAX_FAVORITES];for(int i=0;i<fav_count&&i<MENU_MAX_FAVORITES;++i)fav_ids[i]=menu.favorites[i];uint32_t chord=menu_shortcut(&menu); LeaveCriticalSection(&lock);
+    EnterCriticalSection(&lock); int training_setting=menu_training_multiplier(&menu),move_xp_setting=menu_move_xp_multiplier(&menu),longevity_setting=career.longevity_requested,ps=menu.playstation_icons,scale=menu_scale(&menu),auto_launch=menu_auto_launch(&menu),guide_enabled=menu_guide_enabled(&menu),startup_popups=menu.startup_popups,skip_splashes=menu.skip_splashes,suppress_online_notices=menu.suppress_online_notices,first_only=menu.first_player_only,include_ui=menu.screenshot_include_ui,mute_background=menu.mute_background,decision_replays=menu.decision_replays,instant_replay=menu.instant_replay,replay_step=menu.replay_step_index,replace_online=menu.replace_online_tab,unlock_dlc=menu.unlock_dlc,open_fav_first=menu.open_favorites_first,fav_count=menu.favorite_count,fav_ids[MENU_MAX_FAVORITES];for(int i=0;i<fav_count&&i<MENU_MAX_FAVORITES;++i)fav_ids[i]=menu.favorites[i];uint32_t chord=menu_shortcut(&menu); LeaveCriticalSection(&lock);
     wchar_t value[24];swprintf(value,24,L"0x%08lx",(unsigned long)chord);
     BOOL saved=WritePrivateProfileStringW(L"Menu",L"ButtonIcons",menu_overlay_icons_label(ps),settings_path);
     saved=WritePrivateProfileStringW(L"Menu",L"OpeningShortcut",value,settings_path)&&saved;
@@ -706,6 +717,7 @@ static void save_settings(void) {
     saved=WritePrivateProfileStringW(L"Menu",L"OfferDecisionReplays",decision_replays?L"1":L"0",settings_path)&&saved;
     saved=WritePrivateProfileStringW(L"Menu",L"InstantReplayInFight",instant_replay?L"1":L"0",settings_path)&&saved;
     saved=WritePrivateProfileStringW(L"Menu",L"ReplaceOnlineTabWithParsectagon",replace_online?L"1":L"0",settings_path)&&saved;
+    saved=WritePrivateProfileStringW(L"Menu",L"UnlockDlcVanity",unlock_dlc?L"1":L"0",settings_path)&&saved;
     saved=WritePrivateProfileStringW(L"Menu",L"OpenFavoritesFirst",open_fav_first?L"1":L"0",settings_path)&&saved;
     {wchar_t fav_buf[256];fav_serialize(fav_ids,fav_count,fav_buf,256);saved=WritePrivateProfileStringW(L"Menu",L"Favorites",fav_buf,settings_path)&&saved;}
     saved=WritePrivateProfileStringW(L"Menu",L"MuteWhenUnfocused",mute_background?L"1":L"0",settings_path)&&saved;
@@ -2231,7 +2243,7 @@ static void draw_menu(HDC dc, RECT r) {
     const wchar_t *avatar_always_labels[]={L"Cancel",state.avatar_mode==2?L"Turn Off and restart":L"Turn On and restart"};
     const wchar_t *lobby_account_labels[]={L"Link or change account",L"Unlink this PC",L"Back"};
     const wchar_t *main_labels[]={L"Resume",L"Take screenshot",L"Restart game",L"Cheats",L"Photo Mode",L"Parsectagon",L"Settings",L"Quit game",L"Restart PC",L"Shut down PC"};
-    const wchar_t *setting_labels[]={L"Overlay button icons",L"Opening shortcut",L"UI scale",L"Launch " OVERLAY_GAME_NAME L" after PC restart",L"Xbox / Guide button",L"Windows Game Bar shortcut",L"Launcher setup...",L"Controller access",L"Screenshots folder",L"Reset overlay settings...",L"Patch in-game controller icons...",L"Check for updates...",L"Export support report...",L"Keybinds...",L"Theme...",L"Back",L"Font size",L"Box style",L"Window size",L"Visual auto-confirm fallback",L"Skip intros",L"Suppress online notices",L"Include overlay in screenshots",L"Skip title & network warnings...",L"Mute when unfocused",L"Replay after decisions",L"Experimental...",L"Instant Replay in fights",L"Fix career avatar...",L"Image readback always on",L"Master preset",L"Menu layout",L"Backdrop style",L"Replace Online tab with Parsectagon",L"Open Favorites tab first",L"Parsectagon website...",L"Discord community...",L"GitHub repository..."};
+    const wchar_t *setting_labels[]={L"Overlay button icons",L"Opening shortcut",L"UI scale",L"Launch " OVERLAY_GAME_NAME L" after PC restart",L"Xbox / Guide button",L"Windows Game Bar shortcut",L"Launcher setup...",L"Controller access",L"Screenshots folder",L"Reset overlay settings...",L"Patch in-game controller icons...",L"Check for updates...",L"Export support report...",L"Keybinds...",L"Theme...",L"Back",L"Font size",L"Box style",L"Window size",L"Visual auto-confirm fallback",L"Skip intros",L"Suppress online notices",L"Include overlay in screenshots",L"Skip title & network warnings...",L"Mute when unfocused",L"Replay after decisions",L"Experimental...",L"Instant Replay in fights",L"Fix career avatar...",L"Image readback always on",L"Master preset",L"Menu layout",L"Backdrop style",L"Replace Online tab with Parsectagon",L"Open Favorites tab first",L"Parsectagon website...",L"Discord community...",L"GitHub repository...",L"Unlock DLC & vanity items"};
     const wchar_t *photo_labels[]={state.photo_active?L"Continue camera":L"Enter Photo Mode",L"Freeze action",L"Hide HUD",L"Keep cage visible",L"Show controls panel",L"Reset camera",L"Take screenshot",L"Exit Photo Mode",L"Controls...",L"Filters & effects...",L"Watermark...",L"Back"};
     const wchar_t *effect_labels[]={L"Filter",L"Filter strength",L"Exposure",L"Contrast",L"Saturation",L"Warmth",L"Vignette",L"Film grain",L"Cinematic bars",L"Reset effects",L"Back"};
     const wchar_t *mark_labels[]={L"Show watermark",L"Player name",L"Corner",L"Opacity",L"Size",L"Style",L"Font",L"Text color",L"Back"};
@@ -2360,6 +2372,7 @@ static void draw_menu(HDC dc, RECT r) {
                 case SETTING_AUDIO_FOCUS:toggle=state.mute_background;break;
                 case SETTING_DECISION_REPLAY:toggle=state.decision_replays;break;
                 case SETTING_REPLACE_ONLINE:toggle=state.replace_online_tab;break;
+                case SETTING_UNLOCK_DLC:toggle=state.unlock_dlc;break;
                 case SETTING_FAVORITES_FIRST:toggle=state.open_favorites_first;break;
                 case SETTING_LINK_PARSECTAGON:value=L"parsectagon.cc";break;
                 case SETTING_LINK_DISCORD:value=L"discord.gg";break;
@@ -2375,7 +2388,7 @@ static void draw_menu(HDC dc, RECT r) {
                 default:value=L"Open";break;
             }
 #ifdef UFC4_OVERLAY
-            if(id==SETTING_LAUNCHER||id==SETTING_AVATAR_REPAIR||id==SETTING_AVATAR_ALWAYS||id==SETTING_DECISION_REPLAY||id==SETTING_INSTANT_REPLAY||id==SETTING_STARTUP_PATCH||id==SETTING_REPLACE_ONLINE||id==SETTING_UPDATE||id==SETTING_DIAGNOSTICS){value=L"Unavailable";toggle=-1;arrows=0;}
+            if(id==SETTING_LAUNCHER||id==SETTING_AVATAR_REPAIR||id==SETTING_AVATAR_ALWAYS||id==SETTING_DECISION_REPLAY||id==SETTING_INSTANT_REPLAY||id==SETTING_STARTUP_PATCH||id==SETTING_UPDATE||id==SETTING_DIAGNOSTICS){value=L"Unavailable";toggle=-1;arrows=0;}
 #endif
             if(toggle>=0)toggle_switch(dc,control,toggle,focused);
             else value_chip(dc,control,value?value:L"Open",focused,arrows);
@@ -2495,7 +2508,7 @@ static void draw_menu(HDC dc, RECT r) {
         if(state.page==PAGE_MAIN&&i==MAIN_REBOOT)label_row.right=330;
         if(menu_setting_page(state.page)&&gi==SETTING_SHORTCUT)label_row.right=280;
         else if(menu_setting_page(state.page)&&(gi==SETTING_ICONS||gi==SETTING_SCALE||gi==SETTING_ACCESS||gi==SETTING_FONT||gi==SETTING_BOX_STYLE||gi==SETTING_WINDOW_SIZE||gi==SETTING_MASTER_PRESET||gi==SETTING_LAYOUT_STYLE||gi==SETTING_BACKDROP_STYLE))label_row.right=345;
-        else if((menu_setting_page(state.page)&&(gi==SETTING_REPLACE_ONLINE||gi==SETTING_SCREENSHOT_UI||gi==SETTING_INSTANT_REPLAY||gi==SETTING_AVATAR_ALWAYS||gi==SETTING_STARTUP_POPUPS||gi==SETTING_SKIP_SPLASHES||gi==SETTING_SUPPRESS_ONLINE_NOTICES||gi==SETTING_AUTO_LAUNCH||gi==SETTING_GUIDE||gi==SETTING_GAMEBAR))||(state.page==PAGE_CHEATS&&(i<2||i==7)))label_row.right=410;
+        else if((menu_setting_page(state.page)&&(gi==SETTING_UNLOCK_DLC||gi==SETTING_REPLACE_ONLINE||gi==SETTING_SCREENSHOT_UI||gi==SETTING_INSTANT_REPLAY||gi==SETTING_AVATAR_ALWAYS||gi==SETTING_STARTUP_POPUPS||gi==SETTING_SKIP_SPLASHES||gi==SETTING_SUPPRESS_ONLINE_NOTICES||gi==SETTING_AUTO_LAUNCH||gi==SETTING_GUIDE||gi==SETTING_GAMEBAR))||(state.page==PAGE_CHEATS&&(i<2||i==7)))label_row.right=410;
         else if(state.page==PAGE_CHEATS&&(i==2||i==3||i==4||i==8))label_row.right=300;
         if(state.page==PAGE_KEYBINDS&&i<BIND_COUNT)label_row.right=285;
         if(state.page==PAGE_BINDING&&i<2)label_row.right=280;
@@ -2582,6 +2595,7 @@ static void draw_menu(HDC dc, RECT r) {
         if(menu_setting_page(state.page)&&gi==SETTING_AVATAR_ALWAYS)toggle_switch(dc,control,state.avatar_mode==2,focused);
         if(menu_setting_page(state.page)&&gi==SETTING_DECISION_REPLAY)toggle_switch(dc,control,state.decision_replays,focused);
         if(menu_setting_page(state.page)&&gi==SETTING_REPLACE_ONLINE)toggle_switch(dc,control,state.replace_online_tab,focused);
+        if(menu_setting_page(state.page)&&gi==SETTING_UNLOCK_DLC)toggle_switch(dc,control,state.unlock_dlc,focused);
         if(menu_setting_page(state.page)&&gi==SETTING_AUDIO_FOCUS)toggle_switch(dc,control,state.mute_background,focused);
         if(menu_setting_page(state.page)&&gi==SETTING_SCREENSHOT_UI)toggle_switch(dc,control,state.screenshot_include_ui,focused);
         if(menu_setting_page(state.page)&&(gi==SETTING_STARTUP_POPUPS||gi==SETTING_SKIP_SPLASHES||gi==SETTING_SUPPRESS_ONLINE_NOTICES))toggle_switch(dc,control,gi==SETTING_STARTUP_POPUPS?state.startup_popups:gi==SETTING_SKIP_SPLASHES?state.skip_splashes:state.suppress_online_notices,focused);
@@ -2725,6 +2739,7 @@ static void draw_menu(HDC dc, RECT r) {
             swprintf(line,130,L"Open: %ls  |  F10",chord);
             if(selection==SETTING_DECISION_REPLAY)wcscpy(line,L"Enable before a new offline fight. Requires recorded clips.");
             if(selection==SETTING_REPLACE_ONLINE)wcscpy(line,L"Off keeps " OVERLAY_GAME_NAME L"'s Online tab. F10 > Parsectagon still works.");
+            if(selection==SETTING_UNLOCK_DLC)wcscpy(line,L"Unlocks DLC fighters, vanity clothing, hats & accessories offline.");
             if(selection==SETTING_INSTANT_REPLAY)wcscpy(line,L"Appears in the game pause menu for new offline fights.");
             if(selection==SETTING_AVATAR_REPAIR)wcscpy(line,L"Restart, save Edit Appearance, then restore settings.");
             if(selection==SETTING_AVATAR_ALWAYS)wcscpy(line,L"Untested long-term. Extra GPU readback may lower FPS.");
@@ -2873,6 +2888,7 @@ static void reset_overlay_settings(void){
     menu.decision_replays=GetPrivateProfileIntW(L"Menu",L"OfferDecisionReplays",0,settings_path)!=0;
     menu.instant_replay=GetPrivateProfileIntW(L"Menu",L"InstantReplayInFight",0,settings_path)!=0;
     menu.replace_online_tab=GetPrivateProfileIntW(L"Menu",L"ReplaceOnlineTabWithParsectagon",1,settings_path)!=0;
+    menu.unlock_dlc=GetPrivateProfileIntW(L"Menu",L"UnlockDlcVanity",1,settings_path)!=0;
     menu.open_favorites_first=GetPrivateProfileIntW(L"Menu",L"OpenFavoritesFirst",0,settings_path)!=0;
     {wchar_t fav_buf[256]={0};GetPrivateProfileStringW(L"Menu",L"Favorites",L"",fav_buf,256,settings_path);fav_deserialize(fav_buf,menu.favorites,&menu.favorite_count);}
     menu.avatar_mode=avatar_readback_mode(performance_bin);
@@ -3607,6 +3623,7 @@ static DWORD WINAPI worker(void *unused) {
     menu.decision_replays=GetPrivateProfileIntW(L"Menu",L"OfferDecisionReplays",0,settings_path)!=0;
     menu.instant_replay=GetPrivateProfileIntW(L"Menu",L"InstantReplayInFight",0,settings_path)!=0;
     menu.replace_online_tab=GetPrivateProfileIntW(L"Menu",L"ReplaceOnlineTabWithParsectagon",1,settings_path)!=0;
+    menu.unlock_dlc=GetPrivateProfileIntW(L"Menu",L"UnlockDlcVanity",1,settings_path)!=0;
     menu.open_favorites_first=GetPrivateProfileIntW(L"Menu",L"OpenFavoritesFirst",0,settings_path)!=0;
     {wchar_t fav_buf[256]={0};GetPrivateProfileStringW(L"Menu",L"Favorites",L"",fav_buf,256,settings_path);fav_deserialize(fav_buf,menu.favorites,&menu.favorite_count);}
     menu.mute_background=GetPrivateProfileIntW(L"Menu",L"MuteWhenUnfocused",0,settings_path)!=0;
@@ -3720,6 +3737,7 @@ static DWORD WINAPI worker(void *unused) {
     if(!test_mode)gamebar_monitor_start();
 #ifdef UFC4_OVERLAY
     ufc4_sync_skip_movies(menu.skip_splashes);
+    ufc4_set_unlock_enabled(menu.unlock_dlc);
     ufc4_install_sdl_hooks(NULL);
     ufc4_start_report_watcher();
 #endif
@@ -3904,6 +3922,11 @@ static DWORD WINAPI worker(void *unused) {
             }
             else if(msg.wParam==MENU_INSTANT_REPLAY_CHANGED){save_settings();status(menu.instant_replay?L"Instant Replay On for new offline fights.":L"Instant Replay Off for new fights.");}
             else if(msg.wParam==MENU_REPLACE_ONLINE_CHANGED){save_settings();status(menu.replace_online_tab?L"Parsectagon opens on the Online tab.":OVERLAY_GAME_NAME L" Online tab restored. F10 > Parsectagon remains available.");}
+            else if(msg.wParam==MENU_UNLOCK_DLC_CHANGED){save_settings();
+#ifdef UFC4_OVERLAY
+                ufc4_set_unlock_enabled(menu.unlock_dlc);
+#endif
+                status(menu.unlock_dlc?L"DLC fighters & vanity items unlocked.":L"DLC & vanity unlock disabled (defaults restored).");}
             else if(msg.wParam==MENU_FAVORITES_CHANGED){save_settings();status(L"Favorites updated.");}
             else if(msg.wParam==MENU_FAVORITES_FIRST_CHANGED){save_settings();status(menu.open_favorites_first?L"Overlay will open on Favorites first.":L"Overlay will open on Actions first.");}
             else if(msg.wParam==MENU_OPEN_PARSECTAGON||msg.wParam==MENU_OPEN_DISCORD||msg.wParam==MENU_OPEN_GITHUB){
