@@ -40,8 +40,11 @@ if (-not $Test) {
     if ($LASTEXITCODE) { throw 'Vulkan layer compilation failed' }
     Copy-Item -LiteralPath 'src/ufc6_menu_layer.json' -Destination 'dist/ufc6_menu_layer.json'
     & (Join-Path $root 'build-updater.ps1'); if ($LASTEXITCODE) { throw 'Updater build failed' }
+    if (Test-Path -LiteralPath (Join-Path $root 'ufc4\build.ps1')) {
+        & (Join-Path $root 'ufc4\build.ps1'); if ($LASTEXITCODE) { throw 'UFC 4 build failed' }
+    }
     $manifest = [ordered]@{
-        version = '0.9.90'
+        version = '0.9.91'
         parsec_engine_sha256 = 'd65bb89742d4fbaa6d57fde7a97eab7ed34ff4e6b5b0ae2213d6476d19c7c049'
         engine_revision = '3309ab23f'
         engine_sha256 = '8df294a9c7ef98b1db975f0b9b1628dc061764f3035349d9bff7e1d7af846752'
@@ -111,6 +114,33 @@ if (-not $Test) {
             if ($old.companion_files.PSObject.Properties[$name]) { $prior += $old.companion_files.$name }
             if ($old.previous_companion_sha256 -and $old.previous_companion_sha256.PSObject.Properties[$name]) { $prior += $old.previous_companion_sha256.$name }
             $manifest.new_engine.previous_companion_sha256[$name] = @($prior | Where-Object { $_ -match '^[a-fA-F0-9]{64}$' -and $_ -ne $newCompanions[$name] } | Select-Object -Unique)
+        }
+    }
+    if (Test-Path -LiteralPath 'ufc4/dist/winmm.dll') {
+        $u4Companions = [ordered]@{
+            'ufc4_actions_core.dll' = (Get-FileHash -LiteralPath 'ufc4/dist/ufc4_actions_core.dll').Hash.ToLowerInvariant()
+            'ufc4_actions_layer.dll' = (Get-FileHash -LiteralPath 'ufc4/dist/ufc4_actions_layer.dll').Hash.ToLowerInvariant()
+            'ufc4_actions_layer.json' = (Get-FileHash -LiteralPath 'ufc4/dist/ufc4_actions_layer.json').Hash.ToLowerInvariant()
+            'ufc4_actions_restart.exe' = (Get-FileHash -LiteralPath 'ufc4/dist/ufc4_actions_restart.exe').Hash.ToLowerInvariant()
+            'ufc4_fight_report_watcher.exe' = (Get-FileHash -LiteralPath 'ufc4/dist/ufc4_fight_report_watcher.exe').Hash.ToLowerInvariant()
+        }
+        $manifest.ufc4 = [ordered]@{
+            version = $manifest.version
+            core_file = 'winmm.dll'
+            dll_sha256 = (Get-FileHash -LiteralPath 'ufc4/dist/winmm.dll').Hash.ToLowerInvariant()
+            previous_dll_sha256 = @()
+            companion_files = $u4Companions
+            previous_companion_sha256 = @{}
+        }
+        if ($previousRelease -and $previousRelease.ufc4) {
+            $oldU4 = $previousRelease.ufc4
+            $manifest.ufc4.previous_dll_sha256 = @(@($oldU4.dll_sha256) + @($oldU4.previous_dll_sha256) | Where-Object { $_ -match '^[a-fA-F0-9]{64}$' -and $_ -ne $manifest.ufc4.dll_sha256 } | Select-Object -Unique)
+            foreach ($name in $u4Companions.Keys) {
+                $prior = @()
+                if ($oldU4.companion_files.PSObject.Properties[$name]) { $prior += $oldU4.companion_files.$name }
+                if ($oldU4.previous_companion_sha256 -and $oldU4.previous_companion_sha256.PSObject.Properties[$name]) { $prior += $oldU4.previous_companion_sha256.$name }
+                $manifest.ufc4.previous_companion_sha256[$name] = @($prior | Where-Object { $_ -match '^[a-fA-F0-9]{64}$' -and $_ -ne $u4Companions[$name] } | Select-Object -Unique)
+            }
         }
     }
     $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath 'dist/release.json' -Encoding utf8

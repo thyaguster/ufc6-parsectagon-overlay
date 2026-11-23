@@ -55,7 +55,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int s
         *icon_style=0;
     }
     if(*icon_style){
-        wchar_t ini[MAX_PATH];wsprintfW(ini,L"%ls\\ufc4_actions.ini",path);
+        wchar_t ini[MAX_PATH];wsprintfW(ini,L"%ls\\ufc4-quit-menu.ini",path);
         WritePrivateProfileStringW(L"Appearance",L"GameButtonStyle",!lstrcmpiW(icon_style,L"keyboard")?L"2":!lstrcmpiW(icon_style,L"ps")?L"1":L"0",ini);
     }
     wchar_t command[MAX_PATH+20];wsprintfW(command,L"\"%ls\" --play",launcher);

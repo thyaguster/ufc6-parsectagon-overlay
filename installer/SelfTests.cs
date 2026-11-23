@@ -262,6 +262,23 @@ namespace UFC6OverlaySetup {
                 kytyManager.ApplyAll(cleanKyty,true,false);
                 Assert(!File.Exists(Path.Combine(cleanKyty,"version.dll")) && Manager.HashFile(Path.Combine(cleanKyty,"libwinpthread-1.dll")) == Manager.Hash(stockPthread),"Clean Kyty remove must uninstall overlay files and keep stock libwinpthread-1.dll intact.");
                 passed.Add("PASS: Clean Kyty folder install/remove preserves stock libwinpthread-1.dll.");
+                if (embedded.ufc4 != null) {
+                    string ufc4Dir = Path.Combine(root, "UFC4", "bin");
+                    Directory.CreateDirectory(ufc4Dir);
+                    File.WriteAllBytes(Path.Combine(ufc4Dir, "sacredfire-game.exe"), Bytes("ufc4-sacredfire"));
+                    File.WriteAllText(Path.Combine(ufc4Dir, "ufc4_actions.ini"), "[Menu]\r\nMuteWhenUnfocused=1\r\n");
+                    var u4Files = embedded.ufc4.companion_files.Keys.ToDictionary(n => n, n => Program.Resource(n));
+                    u4Files["winmm.dll"] = Program.Resource("ufc4_winmm.dll");
+                    var u4Mgr = new Manager(embedded.ufc4, u4Files, "sacredfire-game.exe", "UFC 4 (SacredFire)", true);
+                    Inspection u4Insp = u4Mgr.Inspect(Directory.GetParent(ufc4Dir).FullName);
+                    Assert(u4Insp.Supported && u4Insp.Installed == 0, "UFC 4 root folder must resolve to bin\\sacredfire-game.exe.");
+                    u4Mgr.Apply(ufc4Dir, false, false);
+                    Assert(File.Exists(Path.Combine(ufc4Dir, "winmm.dll")) && File.Exists(Path.Combine(ufc4Dir, "ufc4-quit-menu.ini")), "UFC 4 install must deploy winmm.dll and migrate ufc4_actions.ini to ufc4-quit-menu.ini.");
+                    Assert(u4Mgr.Inspect(ufc4Dir).Current == u4Mgr.Order.Count, "UFC 4 inspect must report all files current after install.");
+                    u4Mgr.Apply(ufc4Dir, true, false);
+                    Assert(!File.Exists(Path.Combine(ufc4Dir, "winmm.dll")) && File.Exists(Path.Combine(ufc4Dir, "ufc4-quit-menu.ini")), "UFC 4 remove must uninstall overlay files and keep ufc4-quit-menu.ini.");
+                    passed.Add("PASS: UFC 4 install/remove, root normalization, and ufc4_actions.ini migration.");
+                }
                 var diagnosticHashes=new System.Web.Script.Serialization.JavaScriptSerializer().Deserialize<Dictionary<string,string>>(Encoding.UTF8.GetString(Program.Resource("diagnostics-components.json")).TrimStart('\ufeff'));
                 Assert(diagnosticHashes["version.dll"]==embedded.dll_sha256,"Diagnostic core fingerprint must match the shipped core.");
                 foreach(var item in embedded.companion_files.Where(p=>p.Key!="ufc6_menu_update.exe"&&p.Key!="ufc6_menu_config.exe"))Assert(diagnosticHashes[item.Key]==item.Value,"Diagnostic companion fingerprint must match the shipped payload: "+item.Key);

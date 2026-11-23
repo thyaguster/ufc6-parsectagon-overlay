@@ -1,5 +1,11 @@
 # UFC 4 startup investigation
 
+## 2026-11-22 follow-up
+
+- The installed UFC 4 overlay INI had `SkipStartupSplashes=1` while SacredFire had `skip_movies=0`. The launch proxy now synchronizes SacredFire's saved digit from the UFC 4 overlay preference before the game initializes, in addition to setting `BB_SKIP_MOVIES` and patching the three guarded startup UI records. This allows the UFC 4 switch to remain authoritative when the launcher restores its own movie setting.
+- The existing local install was aligned to `SkipStartupSplashes=1` and `skip_movies=1`. A temporary-file bridge test confirmed Off → On → Off and preservation of unrelated config bytes. Live startup behavior still needs a launch check.
+- Existing UFC 4 installs with saved settings but no `WelcomeShown` marker now migrate to `WelcomeShown=1`; the local install was marked as already configured. New installs still get the first-run page. The first-run text uses the active game's name.
+
 Status (2026-11-19): local full-startup prototype installed; user confirmed it works in-game.
 
 ## Follow-up after movie setting was confirmed (2026-11-19)

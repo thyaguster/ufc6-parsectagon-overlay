@@ -1,3 +1,10 @@
+## v0.9.91 — UFC 4 Overlay Integration & Multi-Game Setup Selector
+
+- **Multi-Game Setup Selector (`UFC 6` & `UFC 4`):** Added per-game checkboxes and folder selectors to `UFC6ParsectagonOverlaySetup.exe` so users can enable or disable **UFC 6** and **UFC 4** independently for installation, update, repair, and removal. Selecting `PORTHEON\games` or a game folder auto-detects both games when present.
+- **UFC 4 Shared Overlay & Unified Layout:** Migrated UFC 4 (`sacredfire-game.exe`) onto the shared Parsectagon Overlay UI (`src/quit_menu.c` with `-DUFC4_OVERLAY`), standardized UFC 4 config (`ufc4-quit-menu.ini` with automatic `ufc4_actions.ini` migration), backups (`ufc4-overlay-backup/`), and SHA-256 verified `Manager` install/remove via `dist/release.json`.
+- **UFC 4 Fight Reports:** Added `stuns`, `controlTimeSeconds`, `round`, `clockSeconds`, `gameMethodCode`, and `TKO`/`Decision`/`Doctor Stoppage`/`DQ`/`Draw` FNV-1 bindings to `ufc4/tools/export_fight_report.py`.
+- **UFC 4 Photo Mode & Instant Replay (On Hold):** Documented investigation findings in `ufc4/UFC4-CHEATS.md` and `docs/ROADMAP.md`; Photo Mode and Replays remain disabled in the UFC 4 overlay for now.
+
 ## v0.9.89 — Out-of-Game Overlay Configurator
 
 - Added **`ufc6_menu_config.exe`**, an out-of-game configurator for Switches & Gameplay, Controller & Keyboard Shortcuts, Appearance, and FPV Camera defaults (`ufc6_fpv.ini`), synced across both `bin` and `novo` (or Clean Kyty).

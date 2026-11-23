@@ -68,7 +68,7 @@ def render(source: Path, width: int, height: int, name: str, scale_factor: float
     stock = images.get(f'{stem}:{state}') or images.get(f'{stem}:normal')
     if stock is None:
         return None
-    Image, _, _ = pillow()
+    Image, ImageDraw, _ = pillow()
     # UFC 4 draws these textures at their full slot size in tutorial text.
     # Leave breathing room around the authored Xbox glyphs.
     scale = scale_factor * min(width/stock.width, height/stock.height)
@@ -76,4 +76,37 @@ def render(source: Path, width: int, height: int, name: str, scale_factor: float
     fitted = stock.resize(size, Image.Resampling.LANCZOS)
     canvas = Image.new('RGBA', (width, height))
     canvas.alpha_composite(fitted, ((width-size[0])//2, (height-size[1])//2))
-    return canvas.tobytes()
+    result = bytearray(canvas.tobytes())
+    if name.startswith('white/') and stem in {'left_trigger', 'right_trigger',
+                                                'left_bumper', 'right_bumper'}:
+        # These four stock bitmaps have torn, irregular outer edges that become
+        # conspicuous after downscaling into the inline tutorial slots. Keep
+        # their lettering, but give the white button body a clean contour.
+        mask = Image.new('L', (width*4, height*4))
+        draw = ImageDraw.Draw(mask)
+        if stem.endswith('trigger'):
+            points = [(5, 5), (29, 5), (32, 8), (32, 24), (27, 30), (5, 30)]
+            base_width, base_height = 36, 36
+        else:
+            points = [(5, 13), (10, 6), (31, 6), (34, 10), (34, 26), (5, 26)]
+            base_width, base_height = 40, 32
+        if stem.startswith('right_'):
+            points = [(base_width-x, y) for x, y in points]
+        draw.polygon([(round(x*4*width/base_width), round(y*4*height/base_height))
+                      for x, y in points], fill=255)
+        alpha = mask.resize((width, height), Image.Resampling.LANCZOS).tobytes()
+        for at in range(0, len(result), 4):
+            opacity = alpha[at//4]
+            opacity = 0 if opacity < 80 else opacity
+            if opacity and (result[at+3] < 200 or result[at:at+3] == b'\0\0\0'):
+                result[at:at+3] = b'\xff\xff\xff'
+            result[at+3] = opacity
+    if stem in {'digital_one', 'digital_two', 'digital_three', 'digital_four'}:
+        # BC7 mode 6 shares one interpolation index across RGB and alpha.
+        # Transparent black next to the white face-button edge produces bright
+        # stray pixels outside the circle. Bleed white into fully transparent
+        # texels; their alpha remains zero, so only compression quality changes.
+        for at in range(0, len(result), 4):
+            if result[at+3] == 0:
+                result[at:at+3] = b'\xff\xff\xff'
+    return bytes(result)

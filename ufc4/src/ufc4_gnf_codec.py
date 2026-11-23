@@ -1,9 +1,10 @@
-"""Small BC7 mode-6 encoder for UFC 4's tiled UI button textures."""
+"""BC7 encoders for UFC 4's tiled UI button textures."""
 from __future__ import annotations
 
 import struct
 
 WEIGHTS = (0, 4, 9, 13, 17, 21, 26, 30, 34, 38, 43, 47, 51, 55, 60, 64)
+WEIGHTS_2 = (0, 21, 43, 64)
 
 
 def dimensions(gnf: bytes) -> tuple[int, int]:
@@ -69,7 +70,65 @@ def bc7_mode6(pixels: list[tuple[int, int, int, int]]) -> bytes:
     return sum(bit << i for i, bit in enumerate(bits)).to_bytes(16, "little")
 
 
-def replace_image(original: bytes, rgba: bytes) -> bytes:
+def bc7_mode5(pixels: list[tuple[int, int, int, int]]) -> bytes:
+    """Encode one block with independent RGB and alpha indices.
+
+    The separate alpha indices keep small opaque letters and antialiased
+    outlines from corrupting one another in UFC 4's inline prompts.
+    """
+    if len(pixels) != 16:
+        raise ValueError("BC7 block needs 16 pixels")
+
+    # Ignore invisible RGB when choosing color endpoints. It has no visual
+    # meaning, but would otherwise pull the endpoints toward transparent black.
+    visible = [p for p in pixels if p[3] >= 16] or [(255, 255, 255, 0)]
+    dark = min(visible, key=lambda p: sum(p[:3]))
+    light = max(visible, key=lambda p: sum(p[:3]))
+    rgb0 = [min(127, max(0, round(c * 127 / 255))) for c in dark[:3]]
+    rgb1 = [min(127, max(0, round(c * 127 / 255))) for c in light[:3]]
+    decoded0 = [(c << 1) | (c >> 6) for c in rgb0]
+    decoded1 = [(c << 1) | (c >> 6) for c in rgb1]
+    alpha0, alpha1 = min(p[3] for p in pixels), max(p[3] for p in pixels)
+
+    def color_indices(first: list[int], second: list[int]) -> list[int]:
+        return [min(range(4), key=lambda i: sum(
+            (p[c] - ((64-WEIGHTS_2[i])*first[c] + WEIGHTS_2[i]*second[c] + 32)//64) ** 2
+            for c in range(3))) if p[3] >= 16 else 0 for p in pixels]
+
+    def alpha_indices(first: int, second: int) -> list[int]:
+        return [min(range(4), key=lambda i: abs(
+            p[3] - ((64-WEIGHTS_2[i])*first + WEIGHTS_2[i]*second + 32)//64))
+            for p in pixels]
+
+    color_idx = color_indices(decoded0, decoded1)
+    if color_idx[0] >= 2:
+        rgb0, rgb1 = rgb1, rgb0
+        color_idx = color_indices(decoded1, decoded0)
+    alpha_idx = alpha_indices(alpha0, alpha1)
+    if alpha_idx[0] >= 2:
+        alpha0, alpha1 = alpha1, alpha0
+        alpha_idx = alpha_indices(alpha0, alpha1)
+
+    bits: list[int] = []
+    _bits(1 << 5, 6, bits)  # BC7 mode 5, rotation 0 (RGB and alpha unchanged).
+    _bits(0, 2, bits)
+    for channel in range(3):
+        _bits(rgb0[channel], 7, bits)
+        _bits(rgb1[channel], 7, bits)
+    _bits(alpha0, 8, bits)
+    _bits(alpha1, 8, bits)
+    _bits(color_idx[0], 1, bits)
+    for index in color_idx[1:]:
+        _bits(index, 2, bits)
+    _bits(alpha_idx[0], 1, bits)
+    for index in alpha_idx[1:]:
+        _bits(index, 2, bits)
+    if len(bits) != 128:
+        raise AssertionError("BC7 mode 5 block length changed")
+    return sum(bit << i for i, bit in enumerate(bits)).to_bytes(16, "little")
+
+
+def replace_image(original: bytes, rgba: bytes, *, separate_alpha: bool = False) -> bytes:
     width, height = dimensions(original)
     if len(rgba) != width * height * 4:
         raise ValueError("Replacement artwork dimensions differ")
@@ -92,5 +151,5 @@ def replace_image(original: bytes, rgba: bytes) -> bytes:
             offset = tile_offset(x, y, pitch)
             if offset + 16 > len(body):
                 raise ValueError("GNF texture allocation is too small")
-            body[offset:offset+16] = bc7_mode6(block)
+            body[offset:offset+16] = bc7_mode5(block) if separate_alpha else bc7_mode6(block)
     return original[:256] + bytes(body)

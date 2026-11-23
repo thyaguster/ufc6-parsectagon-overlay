@@ -43,7 +43,8 @@ class ButtonArtTest(unittest.TestCase):
         self.assertEqual(len(zlib.decompress(keyboard[8:])), len(zlib.decompress(original[8:])))
         self.assertNotEqual(keyboard, original)
         if expected is not None:
-            self.assertEqual(xbox, expected)
+            self.assertEqual(art.legacy_xbox_art(original), expected)
+            self.assertNotEqual(xbox, expected)
         with tempfile.TemporaryDirectory() as folder:
             base = pathlib.Path(folder)
             game = base / "inxp_ui_40.big"

@@ -7,8 +7,12 @@
 #include <stdint.h>
 static HMODULE system_winmm;
 static int read_intro_preference(const wchar_t *bin){
-    wchar_t ini[MAX_PATH];wsprintfW(ini,L"%ls\\ufc4_actions.ini",bin);
+    wchar_t ini[MAX_PATH];wsprintfW(ini,L"%ls\\ufc4-quit-menu.ini",bin);
     HANDLE file=CreateFileW(ini,GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
+    if(file==INVALID_HANDLE_VALUE){
+        wsprintfW(ini,L"%ls\\ufc4_actions.ini",bin);
+        file=CreateFileW(ini,GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
+    }
     if(file==INVALID_HANDLE_VALUE)return -1;
     int found=-1;
     char data[16384];DWORD size=0;
@@ -22,6 +26,35 @@ static int read_intro_preference(const wchar_t *bin){
         }
     }
     CloseHandle(file);return found;
+}
+/* The launcher can restore SacredFire's own setting before this DLL loads. */
+static int sync_sacredfire_movies(int enabled){
+    wchar_t path[MAX_PATH];DWORD n=GetEnvironmentVariableW(L"LOCALAPPDATA",path,MAX_PATH);
+    if(!n||n>=MAX_PATH-34)return -1;
+    lstrcatW(path,L"\\UFC4Native\\sacredfire.ini");
+    HANDLE file=CreateFileW(path,GENERIC_READ|GENERIC_WRITE,FILE_SHARE_READ|FILE_SHARE_WRITE,
+                            NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
+    if(file==INVALID_HANDLE_VALUE)return -1;
+    char data[16384];DWORD size=0,at=0,found=0;int result=-1;
+    if(ReadFile(file,data,sizeof(data),&size,NULL)&&size<sizeof(data)){
+        const char key[]="skip_movies=";
+        for(DWORD i=0;i+sizeof(key)<=size;i++){
+            if((i==0||data[i-1]=='\n')&&!memcmp(data+i,key,sizeof(key)-1)&&
+               (data[i+sizeof(key)-1]=='0'||data[i+sizeof(key)-1]=='1')&&
+               (i+sizeof(key)==size||data[i+sizeof(key)]=='\r'||data[i+sizeof(key)]=='\n')){
+                at=i+sizeof(key)-1;found++;
+            }
+        }
+        if(found==1){
+            if(data[at]=='0'+enabled)result=0;
+            else {
+                DWORD written=0;char digit=(char)('0'+enabled);
+                if(SetFilePointer(file,(LONG)at,NULL,FILE_BEGIN)!=INVALID_SET_FILE_POINTER&&
+                   WriteFile(file,&digit,1,&written,NULL)&&written==1&&FlushFileBuffers(file))result=1;
+            }
+        }
+    }
+    CloseHandle(file);return result;
 }
 #ifdef UFC4_TEST
 static void apply_intro_preference(const wchar_t *bin){
@@ -107,6 +140,7 @@ static int sync_startup_preference(const wchar_t *bin,int enabled){
 }
 #ifdef UFC4_TEST
 __declspec(dllexport) void Ufc4TestApplyIntroPreference(const wchar_t *bin){apply_intro_preference(bin);}
+__declspec(dllexport) int Ufc4TestSyncSacredfireMovies(int enabled){return sync_sacredfire_movies(enabled);}
 __declspec(dllexport) int Ufc4TestSyncStartupAssets(const wchar_t *archive,const wchar_t *bundle,int enabled){return sync_startup_assets(archive,bundle,enabled);}
 #endif
 static void enable_layer(HMODULE self){
@@ -125,6 +159,7 @@ static void enable_layer(HMODULE self){
     int preference=read_intro_preference(path);
     if(preference>=0){
         SetEnvironmentVariableW(L"BB_SKIP_MOVIES",preference?L"1":NULL);
+        sync_sacredfire_movies(preference);
         sync_startup_preference(path,preference);
     }
 }

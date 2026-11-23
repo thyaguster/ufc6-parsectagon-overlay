@@ -15,6 +15,27 @@ foreach ($file in @('README.md','LICENSE','THIRD_PARTY_NOTICES.md','RELEASE-NOTE
 }
 Copy-Item -LiteralPath 'src' -Destination $package -Recurse -Force
 Copy-Item -LiteralPath 'installer' -Destination $package -Recurse -Force
+if (Test-Path -LiteralPath 'ufc4') {
+    New-Item -ItemType Directory -Force -Path "$package\ufc4" | Out-Null
+    foreach ($u4Dir in @('src','tools','tests','docs','port_bridge')) {
+        if (Test-Path -LiteralPath (Join-Path 'ufc4' $u4Dir)) {
+            Copy-Item -LiteralPath (Join-Path 'ufc4' $u4Dir) -Destination "$package\ufc4" -Recurse -Force
+        }
+    }
+    foreach ($u4File in @('README.md','UFC4-CHEATS.md','UFC4-FIGHT-REPORT.md','UFC4-NEXT-CHAT.md','UFC4-STARTUP.md','UFC4-XBOX-ICONS.md','build.ps1','install-test.ps1')) {
+        if (Test-Path -LiteralPath (Join-Path 'ufc4' $u4File)) {
+            Copy-Item -LiteralPath (Join-Path 'ufc4' $u4File) -Destination "$package\ufc4" -Force
+        }
+    }
+    if (Test-Path -LiteralPath 'ufc4\dist') {
+        New-Item -ItemType Directory -Force -Path "$package\ufc4\dist" | Out-Null
+        foreach ($u4Dist in @('winmm.dll','ufc4_actions_core.dll','ufc4_actions_layer.dll','ufc4_actions_layer.json','ufc4_actions_restart.exe','ufc4_fight_report_watcher.exe','ufc4_keycap_sync.exe')) {
+            if (Test-Path -LiteralPath (Join-Path 'ufc4\dist' $u4Dist)) {
+                Copy-Item -LiteralPath (Join-Path 'ufc4\dist' $u4Dist) -Destination "$package\ufc4\dist" -Force
+            }
+        }
+    }
+}
 New-Item -ItemType Directory -Force -Path "$package\docs", "$package\docs\screenshots" | Out-Null
 foreach ($name in @('PHOTO-MODE.md','SCREENSHOTS.md','PERFORMANCE.md','STARTUP.md','FIGHT-REPORT-EXPORT.md','LIVE-FIGHT-UPLOAD.md','ROADMAP.md','theme-config.example.cfg')) { Copy-Item -LiteralPath (Join-Path 'docs' $name) -Destination "$package\docs" }
 Get-ChildItem -LiteralPath 'docs/screenshots' -File | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination "$package\docs\screenshots" }

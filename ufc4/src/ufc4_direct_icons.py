@@ -97,7 +97,10 @@ def prepare(archive: Path, manifest: Path, output: Path, bindings_path: Path | N
         # replacement in the fight HUD.
         ground_stick = name in ("text_ground_game_hud/las.gnf", "text_ground_game_hud/ras.gnf")
         xbox_rgba = None if ground_stick else render_stock_xbox(output / "ufc4_buttonart_ps.bin", width, height, name)
-        xbox = replace_image(original, xbox_rgba) if xbox_rgba else original
+        clean_inline = (name.startswith("white/") and
+                        name.rsplit("/", 1)[-1] in {"left_trigger.gnf", "right_trigger.gnf",
+                                                       "left_bumper.gnf", "right_bumper.gnf"})
+        xbox = replace_image(original, xbox_rgba, separate_alpha=clean_inline) if xbox_rgba else original
         for style, variant in (("ps", original), ("xbox", xbox), ("keyboard", keyboard)):
             if len(variant) != size:
                 raise ValueError(f"Size mismatch in {name}")

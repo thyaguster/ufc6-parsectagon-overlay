@@ -6,10 +6,12 @@
 #include <wchar.h>
 #include <shellapi.h>
 #include <objbase.h>
+#include <shlobj.h>
 #include <Xinput.h>
 #include "screenshot_folder.h"
 #include "ufc4_live_cheats.h"
 #include "audio_session_mute.h"
+#include "overlay_widget.h"
 
 static volatile LONG open;
 static int page, selected;
@@ -27,13 +29,19 @@ static int skip_movies;
 static volatile LONG mute_unfocused;
 static int preferences_loaded;
 static volatile LONG audio_worker_started;
+static volatile LONG report_watcher_started;
 static unsigned cheats_mask;
 static int cheats_ready;
-enum {PAGE_MAIN,PAGE_SETTINGS,PAGE_ABOUT,PAGE_QUIT,PAGE_RESTART,PAGE_ICON_CONFIRM,PAGE_GAME_ICONS,PAGE_CHEATS};
-static const wchar_t *main_items[]={L"Resume game",L"Take screenshot",L"Open screenshots folder",L"Restart game",L"Settings",L"Cheats",L"Quit game"};
+static unsigned damage_mask;
+static int damage_ready;
+static int ko_ready;
+static unsigned ko_armed;
+enum {PAGE_MAIN,PAGE_SETTINGS,PAGE_ABOUT,PAGE_QUIT,PAGE_RESTART,PAGE_ICON_CONFIRM,PAGE_GAME_ICONS,PAGE_CHEATS,PAGE_REPORTS};
+static const wchar_t *main_items[]={L"Resume game",L"Take screenshot",L"Open screenshots folder",L"Restart game",L"Settings",L"Cheats",L"Fight reports...",L"Quit game"};
+static const wchar_t *report_items[]={L"Export fight report now",L"Open Fight Reports folder",L"Back"};
 static const wchar_t *settings_items[]={L"Overlay button icons",L"Game button icons",L"Skip intros",L"Mute when unfocused",L"Back"};
 static const wchar_t *game_icon_items[]={L"Xbox",L"PlayStation",L"Keyboard & mouse",L"Back"};
-static const wchar_t *cheat_items[]={L"Infinite stamina: left fighter",L"Infinite stamina: right fighter",L"Back"};
+static const wchar_t *cheat_items[]={L"Infinite stamina: left fighter",L"Infinite stamina: right fighter",L"No damage: player 1",L"Next Hit KO (known issue: may trigger on 2nd hit)",L"Savegame backups..."};
 static const wchar_t *choice_items[]={L"Cancel",L"Confirm"};
 typedef DWORD (WINAPI *XInputStateFn)(DWORD,XINPUT_STATE*);
 static XInputStateFn xinput_state;
@@ -44,6 +52,23 @@ static void settings_path(wchar_t *path,DWORD length){
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,(LPCWSTR)(uintptr_t)&settings_path,&module);
     if(!module||!GetModuleFileNameW(module,path,length)){*path=0;return;}
     wchar_t *slash=wcsrchr(path,L'\\');if(slash)lstrcpyW(slash+1,L"ufc4_actions.ini");else *path=0;
+}
+static void start_report_watcher(void){
+#ifndef UFC4_TEST
+    if(InterlockedCompareExchange(&report_watcher_started,1,0)!=0)return;
+    wchar_t path[MAX_PATH];settings_path(path,MAX_PATH);
+    wchar_t *slash=wcsrchr(path,L'\\');
+    if(!slash)return;
+    lstrcpyW(slash+1,L"ufc4_fight_report_watcher.exe");
+    if(GetFileAttributesW(path)==INVALID_FILE_ATTRIBUTES)return;
+    wchar_t command[MAX_PATH+4];
+    if(swprintf(command,MAX_PATH+4,L"\"%ls\"",path)<0)return;
+    STARTUPINFOW startup={0};startup.cb=sizeof(startup);
+    PROCESS_INFORMATION process={0};
+    if(CreateProcessW(path,command,NULL,NULL,FALSE,CREATE_NO_WINDOW,NULL,NULL,&startup,&process)){
+        CloseHandle(process.hThread);CloseHandle(process.hProcess);
+    }
+#endif
 }
 static void load_preferences(void){
     if(preferences_loaded)return;
@@ -154,6 +179,39 @@ static void open_screenshots(void){
     CoTaskMemFree(folder);
     if((INT_PTR)result<=32)message(L"Could not open the screenshots folder.");
 }
+static const GUID ufc4_documents_guid={0xfdd39ad0,0x238f,0x46af,{0xad,0xb4,0x6c,0x85,0x48,0x03,0x69,0xc7}};
+static void open_reports_folder(void){
+    PWSTR docs=NULL;wchar_t folder[MAX_PATH];
+    if(FAILED(SHGetKnownFolderPath(&ufc4_documents_guid,0,NULL,&docs))||!docs){message(L"Documents folder is unavailable.");return;}
+    int ok=swprintf(folder,MAX_PATH,L"%ls\\UFC Parsectagon Overlay\\UFC4\\Fight Reports",docs)>0;
+    CoTaskMemFree(docs);
+    if(!ok){message(L"Fight Reports path is invalid.");return;}
+    CreateDirectoryW(folder,NULL);
+    if((INT_PTR)ShellExecuteW(NULL,L"open",folder,NULL,NULL,SW_SHOWNORMAL)<=32)message(L"Could not open the Fight Reports folder.");
+}
+static DWORD WINAPI export_report_worker(void *unused){
+    (void)unused;
+    wchar_t path[MAX_PATH],command[MAX_PATH+48];settings_path(path,MAX_PATH);
+    wchar_t *slash=wcsrchr(path,L'\\');
+    if(!slash){message(L"Report exporter not found.");return 0;}
+    lstrcpyW(slash+1,L"ufc4_fight_report_watcher.exe");
+    if(GetFileAttributesW(path)==INVALID_FILE_ATTRIBUTES){message(L"ufc4_fight_report_watcher.exe not found.");return 0;}
+    swprintf(command,MAX_PATH+48,L"\"%ls\" --once --pid %lu",path,GetCurrentProcessId());
+    STARTUPINFOW startup={0};startup.cb=sizeof(startup);PROCESS_INFORMATION process={0};
+    if(!CreateProcessW(path,command,NULL,NULL,FALSE,CREATE_NO_WINDOW,NULL,NULL,&startup,&process)){
+        message(L"Could not start fight report export.");return 0;
+    }
+    WaitForSingleObject(process.hProcess,15000);
+    DWORD code=1;GetExitCodeProcess(process.hProcess,&code);
+    CloseHandle(process.hThread);CloseHandle(process.hProcess);
+    message(code==0?L"Fight report exported (and upload checked).":L"No finished fight found. Open a finished fight first.");
+    return 0;
+}
+static void export_report_now(void){
+    message(L"Exporting fight report...");
+    HANDLE t=CreateThread(NULL,0,export_report_worker,NULL,0,NULL);
+    if(t)CloseHandle(t);else message(L"Could not start export thread.");
+}
 static void restart_game(int icon_style){
     HWND window=game_window();
     wchar_t helper[MAX_PATH],event_name[110],command[500];
@@ -252,11 +310,11 @@ static void install_input_hooks(void){
 }
 #ifdef UFC4_TEST
 __declspec(dllexport) void Ufc4TestOpen(void){open=1;page=0;selected=0;}
-__declspec(dllexport) void Ufc4TestCheatPage(unsigned mask){open=1;page=PAGE_CHEATS;selected=0;cheats_mask=mask;cheats_ready=1;}
+__declspec(dllexport) void Ufc4TestCheatPage(unsigned mask){open=1;page=PAGE_CHEATS;selected=0;cheats_mask=mask;cheats_ready=1;damage_mask=0;damage_ready=1;ko_ready=0;ko_armed=0;}
 #endif
 
 static int edge(int down,int *previous){int pressed=down&&!*previous;*previous=down;return pressed;}
-static int row_count(void){return page==PAGE_MAIN?7:page==PAGE_GAME_ICONS?4:page==PAGE_SETTINGS?5:page==PAGE_CHEATS?3:page==PAGE_QUIT||page==PAGE_RESTART||page==PAGE_ICON_CONFIRM?2:1;}
+static int row_count(void){return page==PAGE_MAIN?8:page==PAGE_GAME_ICONS?4:page==PAGE_SETTINGS?5:page==PAGE_CHEATS?5:page==PAGE_REPORTS?3:page==PAGE_QUIT||page==PAGE_RESTART||page==PAGE_ICON_CONFIRM?2:1;}
 static void poll_input(void){
     load_preferences();
     if(!xinput_state){HMODULE x=GetModuleHandleW(L"XInput1_4.dll");if(!x)x=LoadLibraryW(L"XInput1_4.dll");if(x)xinput_state=(XInputStateFn)GetProcAddress(x,"XInputGetState");}
@@ -288,9 +346,14 @@ static void poll_input(void){
         case 2:open_screenshots();break;
         case 3:page=PAGE_RESTART;selected=0;break;
         case 4:page=PAGE_SETTINGS;selected=0;break;
-        case 5:page=PAGE_CHEATS;selected=0;cheats_ready=ufc4_live_stamina_prepare();cheats_mask=ufc4_live_stamina_mask();break;
-        case 6:page=PAGE_QUIT;selected=0;break;
+        case 5:page=PAGE_CHEATS;selected=0;cheats_ready=ufc4_live_stamina_prepare();cheats_mask=ufc4_live_stamina_mask();damage_ready=ufc4_live_damage_prepare();damage_mask=ufc4_live_damage_mask();ko_ready=ufc4_live_ko_prepare();break;
+        case 6:page=PAGE_REPORTS;selected=0;break;
+        case 7:page=PAGE_QUIT;selected=0;break;
         }
+    }else if(page==PAGE_REPORTS){
+        if(selected==0)export_report_now();
+        else if(selected==1)open_reports_folder();
+        else{page=PAGE_MAIN;selected=6;}
     }else if(page==PAGE_SETTINGS){
         if(selected==0){button_style=!button_style;save_preferences();}
         else if(selected==1){page=PAGE_GAME_ICONS;selected=game_button_style;}
@@ -306,8 +369,18 @@ static void poll_input(void){
         }
         else{page=PAGE_MAIN;selected=0;}
     }else if(page==PAGE_CHEATS){
-        if(selected==2){page=PAGE_MAIN;selected=5;}
-        else if(!cheats_ready)message(L"Live stamina hook is unavailable in this game build.");
+        if(selected==4){page=PAGE_MAIN;selected=5;}
+        else if(selected==3){
+            if(!ko_ready)message(L"Next hit KO is unavailable in this game build.");
+            else if(ufc4_live_ko_toggle(&ko_armed)){
+                message(ko_armed?L"Next Hit KO armed. Land any strike.":L"Next Hit KO cancelled.");
+            }else message(L"Could not arm Next hit KO.");
+        }
+        else if(selected==2){
+            if(!damage_ready)message(L"Live damage hook is unavailable in this game build.");
+            else if(ufc4_live_damage_toggle(&damage_mask))message(L"No damage changed for this session.");
+            else message(L"Could not change the live damage cheat.");
+        }else if(!cheats_ready)message(L"Live stamina hook is unavailable in this game build.");
         else if(ufc4_live_stamina_toggle(selected,&cheats_mask))message(L"Stamina cheat changed for this session.");
         else message(L"Could not change the live stamina cheat.");
     }else if(page==PAGE_GAME_ICONS){
@@ -327,15 +400,28 @@ static void poll_input(void){
 }
 
 __declspec(dllexport) void Ufc4MenuExtent(uint32_t screen_width,uint32_t screen_height,uint32_t *width,uint32_t *height){
-    panel_width=screen_width<760?screen_width-24:700;
-    panel_height=screen_height<560?screen_height-24:500;
+    panel_width=screen_width<1080?screen_width-24:1040;
+    panel_height=screen_height<560?screen_height-24:520;
     *width=panel_width;*height=panel_height;
+}
+__declspec(dllexport) void Ufc4OverlayPosition(uint32_t screen_width,uint32_t screen_height,uint32_t *x,uint32_t *y){
+    (void)screen_height;*x=(screen_width-panel_width)/2;*y=16;
+}
+static void menu_text(HDC dc,HFONT font,const wchar_t *value,RECT box,COLORREF color,UINT flags){
+    HGDIOBJ previous=SelectObject(dc,font);SetTextColor(dc,color);
+    DrawTextW(dc,value,-1,&box,flags|DT_SINGLELINE|DT_END_ELLIPSIS);
+    SelectObject(dc,previous);
 }
 __declspec(dllexport) BOOL Ufc4RenderMenu(void *destination,uint32_t bytes){
     install_input_hooks();
     load_preferences();
     start_audio_worker();
+    start_report_watcher();
+    int ko_status=ufc4_live_ko_poll();
+    if(ko_status==2){ko_armed=0;message(L"Knockout triggered. Next Hit KO disarmed.");}
+    else if(ko_status==3){ko_armed=0;message(L"Next Hit KO cancelled or the fight ended.");}
     poll_input();
+    if(!menu_open())ufc4_live_ko_start_window();
     if(!menu_open())return FALSE;
     if(!destination)return TRUE;
     if(bytes<panel_width*panel_height*4)return FALSE;
@@ -345,43 +431,51 @@ __declspec(dllexport) BOOL Ufc4RenderMenu(void *destination,uint32_t bytes){
     HBITMAP bitmap=CreateDIBSection(screen,&info,DIB_RGB_COLORS,&pixels,NULL,0);ReleaseDC(NULL,screen);
     if(!dc||!bitmap||!pixels){if(bitmap)DeleteObject(bitmap);if(dc)DeleteDC(dc);return FALSE;}
     HGDIOBJ old=SelectObject(dc,bitmap);
-    RECT full={0,0,(LONG)panel_width,(LONG)panel_height};HBRUSH bg=CreateSolidBrush(RGB(12,17,27));FillRect(dc,&full,bg);DeleteObject(bg);
-    RECT stripe={0,0,8,(LONG)panel_height};HBRUSH accent=CreateSolidBrush(RGB(231,55,68));FillRect(dc,&stripe,accent);DeleteObject(accent);
-    HFONT title=CreateFontW(-31,0,0,0,FW_BOLD,0,0,0,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");
-    HFONT body=CreateFontW(-20,0,0,0,FW_NORMAL,0,0,0,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");
-    SetBkMode(dc,TRANSPARENT);SetTextColor(dc,RGB(242,245,248));SelectObject(dc,title);
-    const wchar_t *heading=page==PAGE_MAIN?L"UFC 4 Actions Overlay":page==PAGE_SETTINGS?L"Settings":page==PAGE_CHEATS?L"Cheats":page==PAGE_GAME_ICONS?L"Game button icons":page==PAGE_QUIT?L"Quit UFC 4?":page==PAGE_RESTART?L"Restart UFC 4?":page==PAGE_ICON_CONFIRM?L"Change game button icons?":L"About";
-    TextOutW(dc,34,24,heading,(int)wcslen(heading));SelectObject(dc,body);SetTextColor(dc,RGB(175,190,207));
-    const wchar_t *sub=page==PAGE_MAIN?L"Quick actions while UFC 4 is running":page==PAGE_SETTINGS?L"Prompts, startup videos, and audio":page==PAGE_CHEATS?L"Stamina changes now and resets when UFC 4 exits.":page==PAGE_GAME_ICONS?L"Choose the prompts shown by UFC 4.":page==PAGE_QUIT?L"Unsaved game progress may be lost.":page==PAGE_RESTART?L"The game will close and relaunch through PORTHEON.":page==PAGE_ICON_CONFIRM?L"The game will close and restart. Save progress first.":L"Native Vulkan prototype for UFC 4";
-    TextOutW(dc,35,69,sub,(int)wcslen(sub));
-    if(page==PAGE_ICON_CONFIRM){
-        const wchar_t *target=icon_choice==2?L"New game prompts: Keyboard & mouse":icon_choice?L"New game prompts: PlayStation":L"New game prompts: Xbox";
-        TextOutW(dc,35,89,target,(int)wcslen(target));
-    }
-    const wchar_t **items=page==PAGE_MAIN?main_items:page==PAGE_SETTINGS?settings_items:page==PAGE_CHEATS?cheat_items:page==PAGE_GAME_ICONS?game_icon_items:page==PAGE_QUIT||page==PAGE_RESTART||page==PAGE_ICON_CONFIRM?choice_items:NULL;
+    RECT full={0,0,(LONG)panel_width,(LONG)panel_height};HBRUSH bg=CreateSolidBrush(RGB(7,8,11));FillRect(dc,&full,bg);DeleteObject(bg);
+    const COLORREF surface=RGB(16,20,28),border=RGB(46,52,66),ink=RGB(245,246,248),muted=RGB(156,163,175),red=RGB(228,69,75);
+    SetBkMode(dc,TRANSPARENT);
+    HFONT title=CreateFontW(-19,0,0,0,FW_BOLD,0,0,0,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");
+    HFONT body=CreateFontW(-18,0,0,0,FW_NORMAL,0,0,0,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");
+    HFONT small=CreateFontW(-15,0,0,0,FW_SEMIBOLD,0,0,0,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");
+    int bar_left=((int)panel_width-960)/2;if(bar_left<8)bar_left=8;
+    RECT bar={bar_left,12,(LONG)panel_width-bar_left,62};overlay_row_surface(dc,bar,4,8,surface,border);
+    RECT brand={bar.left+22,bar.top+6,bar.left+208,bar.bottom-5};menu_text(dc,title,L"PARSECTAGON",brand,red,DT_LEFT|DT_VCENTER);
+    RECT game={bar.right-172,bar.top+10,bar.right-20,bar.bottom-9};menu_text(dc,small,L"UFC 4 OVERLAY",game,ink,DT_RIGHT|DT_VCENTER);
+    int tab=page==PAGE_CHEATS?1:page==PAGE_SETTINGS||page==PAGE_GAME_ICONS||page==PAGE_ICON_CONFIRM?2:0;
+    const wchar_t *tabs[]={L"Actions",L"Cheats",L"Settings"};
+    for(int t=0;t<3;++t){RECT tab_box={bar.left+272+t*130,bar.top+10,bar.left+394+t*130,bar.bottom-10};
+        if(t==tab)overlay_row_surface(dc,tab_box,4,5,red,RGB(176,76,81));
+        menu_text(dc,small,tabs[t],tab_box,t==tab?ink:muted,DT_CENTER|DT_VCENTER);}
+    int flyout_width=(int)panel_width-32;if(flyout_width>680)flyout_width=680;
+    int flyout_left=((int)panel_width-flyout_width)/2;
+    RECT flyout={flyout_left,75,flyout_left+flyout_width,(LONG)panel_height-12};overlay_row_surface(dc,flyout,4,10,surface,border);
+    const wchar_t *heading=page==PAGE_MAIN?L"QUICK MATCH ACTIONS":page==PAGE_SETTINGS?L"OVERLAY APPEARANCE & SYSTEM":page==PAGE_CHEATS?L"LIVE CHEATS & SPARRING LAB":page==PAGE_REPORTS?L"FIGHT REPORTS & UPLOAD":page==PAGE_GAME_ICONS?L"GAME BUTTON ICONS":page==PAGE_QUIT?L"QUIT UFC 4?":page==PAGE_RESTART?L"RESTART UFC 4?":page==PAGE_ICON_CONFIRM?L"CHANGE GAME BUTTON ICONS?":L"ABOUT";
+    RECT heading_box={flyout.left+23,flyout.top+10,flyout.right-22,flyout.top+38};menu_text(dc,small,heading,heading_box,red,DT_LEFT|DT_VCENTER);
+    const wchar_t **items=page==PAGE_MAIN?main_items:page==PAGE_SETTINGS?settings_items:page==PAGE_CHEATS?cheat_items:page==PAGE_REPORTS?report_items:page==PAGE_GAME_ICONS?game_icon_items:page==PAGE_QUIT||page==PAGE_RESTART||page==PAGE_ICON_CONFIRM?choice_items:NULL;
     int count=row_count();
     if(items){
-        int step=page==PAGE_MAIN?(panel_height<480?35:42):57;
-        for(int i=0;i<count;++i){int y=113+i*step;RECT r={30,y,(LONG)panel_width-30,y+(page==PAGE_MAIN?step-4:42)};HBRUSH brush=CreateSolidBrush(i==selected?RGB(40,66,67):RGB(27,36,49));FillRect(dc,&r,brush);DeleteObject(brush);
-            SetTextColor(dc,i==selected?RGB(127,246,193):RGB(235,241,247));TextOutW(dc,47,y+9,items[i],(int)wcslen(items[i]));
-            if(page==PAGE_SETTINGS&&i==0){const wchar_t *value=button_style?L"PlayStation":L"Xbox";TextOutW(dc,(int)panel_width-190,y+9,value,(int)wcslen(value));}
-            if(page==PAGE_SETTINGS&&i==1){const wchar_t *value=game_button_style==2?L"Keyboard & mouse":game_button_style?L"PlayStation":L"Xbox";TextOutW(dc,(int)panel_width-225,y+9,value,(int)wcslen(value));}
-            if(page==PAGE_SETTINGS&&i==2){const wchar_t *value=skip_movies?L"On":L"Off";TextOutW(dc,(int)panel_width-145,y+9,value,(int)wcslen(value));}
-            if(page==PAGE_SETTINGS&&i==3){const wchar_t *value=InterlockedCompareExchange(&mute_unfocused,0,0)?L"On":L"Off";TextOutW(dc,(int)panel_width-145,y+9,value,(int)wcslen(value));}
-            if(page==PAGE_GAME_ICONS&&i==game_button_style){const wchar_t *value=L"Current";TextOutW(dc,(int)panel_width-150,y+9,value,(int)wcslen(value));}
-            if(page==PAGE_CHEATS&&i<2){const wchar_t *value=!cheats_ready?L"Unavailable":(cheats_mask&(1u<<i))?L"On":L"Off";TextOutW(dc,(int)panel_width-145,y+9,value,(int)wcslen(value));}
+        int step=count>6?46:57;
+        for(int i=0;i<count;++i){int y=flyout.top+42+i*step;RECT r={flyout.left+16,y,flyout.right-16,y+step-5};
+            overlay_row_surface(dc,r,4,7,i==selected?RGB(44,29,34):RGB(15,20,28),i==selected?RGB(160,72,80):border);
+            if(i==selected){RECT mark={r.left+2,r.top+7,r.left+5,r.bottom-7};HBRUSH marker=CreateSolidBrush(red);FillRect(dc,&mark,marker);DeleteObject(marker);}
+            RECT label={r.left+19,r.top+2,r.right-150,r.bottom-2};menu_text(dc,body,items[i],label,i==selected?ink:muted,DT_LEFT|DT_VCENTER);
+            const wchar_t *value=NULL;
+            if(page==PAGE_SETTINGS&&i==0)value=button_style?L"PlayStation":L"Xbox";
+            if(page==PAGE_SETTINGS&&i==1)value=game_button_style==2?L"Keyboard & mouse":game_button_style?L"PlayStation":L"Xbox";
+            if(page==PAGE_SETTINGS&&i==2)value=skip_movies?L"On":L"Off";
+            if(page==PAGE_SETTINGS&&i==3)value=InterlockedCompareExchange(&mute_unfocused,0,0)?L"On":L"Off";
+            if(page==PAGE_GAME_ICONS&&i==game_button_style)value=L"Current";
+            if(page==PAGE_CHEATS&&i<2)value=!cheats_ready?L"Unavailable":(cheats_mask&(1u<<i))?L"On":L"Off";
+            if(page==PAGE_CHEATS&&i==2)value=!damage_ready?L"Unavailable":(damage_mask&2u)?L"On":L"Off";
+            if(page==PAGE_CHEATS&&i==3)value=!ko_ready?L"Unavailable":ko_armed?L"Armed":L"Off";
+            if(value){RECT status={r.right-166,r.top+2,r.right-17,r.bottom-2};menu_text(dc,small,value,status,i==selected?red:muted,DT_RIGHT|DT_VCENTER);}
         }
-    }else{SetTextColor(dc,RGB(235,241,247));
-        const wchar_t *first=L"Screenshots, restart, quit and input are now ported.";
-        const wchar_t *second=L"Stamina cheats use PORTHEON; Photo Mode needs UFC 4 work.";
-        TextOutW(dc,35,135,first,(int)wcslen(first));
-        TextOutW(dc,35,178,second,(int)wcslen(second));
     }
-    SetTextColor(dc,RGB(163,177,194));
+    RECT footer_box={flyout.left+20,flyout.bottom-42,flyout.right-20,flyout.bottom-16};
     const wchar_t *footer=button_style?L"D-pad: move    Cross: select    Circle: back    F10: close    F12: screenshot":L"D-pad: move    A: select    B: back    F10: close    F12: screenshot";
-    TextOutW(dc,35,(int)panel_height-72,footer,(int)wcslen(footer));
-    if(notice_until>GetTickCount()){SetTextColor(dc,RGB(127,246,193));TextOutW(dc,35,(int)panel_height-39,notice,(int)wcslen(notice));}
+    menu_text(dc,small,footer,footer_box,muted,DT_LEFT|DT_VCENTER);
+    if(notice_until>GetTickCount()){RECT alert={flyout.left+24,flyout.bottom-67,flyout.right-24,flyout.bottom-42};menu_text(dc,small,notice,alert,red,DT_LEFT|DT_VCENTER);}
     SelectObject(dc,old);memcpy(destination,pixels,panel_width*panel_height*4);
     unsigned char *p=destination;for(uint32_t i=3;i<panel_width*panel_height*4;i+=4)p[i]=255;
-    DeleteObject(title);DeleteObject(body);DeleteObject(bitmap);DeleteDC(dc);return TRUE;
+    DeleteObject(title);DeleteObject(body);DeleteObject(small);DeleteObject(bitmap);DeleteDC(dc);return TRUE;
 }

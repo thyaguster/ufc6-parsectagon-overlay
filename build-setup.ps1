@@ -9,6 +9,12 @@ $arguments = @('/nologo', '/codepage:65001', '/target:winexe', '/platform:x64', 
 foreach ($name in @('libwinpthread-1.dll', 'winmm.dll', 'version.dll', 'ufc6_menu_layer.dll', 'ufc6_menu_layer.json', 'ufc6_menu_restart.exe', 'ufc6_menu_icons.exe', 'ufc6_menu_config.exe', 'release.json')) {
     $arguments += "/resource:dist\$name,$name"
 }
+if (Test-Path -LiteralPath 'ufc4\dist\winmm.dll') {
+    $arguments += '/resource:ufc4\dist\winmm.dll,ufc4_winmm.dll'
+    foreach ($name in @('ufc4_actions_core.dll', 'ufc4_actions_layer.dll', 'ufc4_actions_layer.json', 'ufc4_actions_restart.exe', 'ufc4_fight_report_watcher.exe')) {
+        $arguments += "/resource:ufc4\dist\$name,$name"
+    }
+}
 $arguments += @('installer\Setup.cs', 'installer\EngineCompatibility.cs', 'installer\SelfTests.cs', 'installer\AssemblyInfo.cs', 'installer\UpdateClient.cs', 'installer\UpdateForm.cs', 'installer\ModernUi.cs', 'installer\FolderPicker.cs', 'installer\Diagnostics.cs', 'installer\DiagnosticsForm.cs', 'installer\DiagnosticsTests.cs', 'installer\Configurator.cs', 'installer\ConfiguratorForm.cs')
 & $compiler @arguments
 if ($LASTEXITCODE) { throw 'Setup compilation failed.' }

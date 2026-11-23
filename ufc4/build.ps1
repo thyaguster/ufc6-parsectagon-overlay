@@ -6,7 +6,8 @@ if (!(Test-Path -LiteralPath $zig)) { throw 'Zig compiler missing' }
 Push-Location -LiteralPath $PSScriptRoot
 try {
     New-Item -ItemType Directory -Path dist -Force | Out-Null
-    & $zig cc -target x86_64-windows-gnu -O2 -Wall -Wextra -shared -Isrc -I../src src/ufc4_core.c src/ufc4_live_cheats.c src/screenshot_folder.c ../src/audio_session_mute.c -lgdi32 -luser32 -lkernel32 -lshell32 -lole32 -luuid -o dist/ufc4_actions_core.dll
+    $u4Sources = @('../src/quit_menu.c', '../src/lobby_bridge.c', '../src/overlay_preferences.c', '../src/save_backups.c', '../src/audio_session_mute.c', 'src/screenshot_folder.c', '../src/gamebar_shortcut.c', '../src/gamebar_monitor.c', '../src/launch_config.c', '../src/launcher_dialog.c', 'src/ufc4_live_cheats.c', 'src/ufc4_compat_stubs.c')
+    & $zig cc -target x86_64-windows-gnu -O2 -Wall -Wextra -shared -DUFC4_OVERLAY -Isrc -I../src @u4Sources -lgdi32 -luser32 -lkernel32 -lshell32 -lole32 -luuid -ladvapi32 -lcomdlg32 -lwinhttp -o dist/ufc4_actions_core.dll
     if ($LASTEXITCODE) { throw 'Core build failed' }
     & $zig cc -target x86_64-windows-gnu -O2 -Wall -Wextra -shared -DUFC4_TEST -Isrc -I../src src/ufc4_core.c src/ufc4_live_cheats.c src/screenshot_folder.c ../src/audio_session_mute.c -lgdi32 -luser32 -lkernel32 -lshell32 -lole32 -luuid -o dist/ufc4_actions_core_test.dll
     if ($LASTEXITCODE) { throw 'Core test build failed' }
@@ -17,11 +18,14 @@ try {
     & $zig cc -target x86_64-windows-gnu -O2 -Wall -Wextra -municode src/ufc4_restart.c -lkernel32 -lshell32 '-Wl,--subsystem,windows' -o dist/ufc4_actions_restart.exe
     if ($LASTEXITCODE) { throw 'Restart helper build failed' }
     Copy-Item -LiteralPath src/ufc4_actions_layer.json -Destination dist/ufc4_actions_layer.json -Force
-    $font=Join-Path $PSScriptRoot 'src/ufc4_keyboard/keyboard-art/font/BarlowCondensed-Bold.ttf'
-    $tail=Join-Path $PSScriptRoot 'src/ufc4_buttonart_xbox_tail.bin'
+    $font = Join-Path $PSScriptRoot 'src/ufc4_keyboard/keyboard-art/font/BarlowCondensed-Bold.ttf'
+    $tail = Join-Path $PSScriptRoot 'src/ufc4_buttonart_xbox_tail.bin'
     & python -m PyInstaller --onefile --noconfirm --clean --exclude-module numpy --name ufc4_keycap_sync --paths src --paths src/ufc4_keyboard "--add-data=$font;ufc4_keyboard/keyboard-art/font" "--add-data=$tail;." --distpath dist --workpath (Join-Path $PSScriptRoot '.build/ufc4-keycap') --specpath (Join-Path $PSScriptRoot '.build') src/ufc4_keycap_sync.py
     if ($LASTEXITCODE) { throw 'UFC 4 keyboard sync helper build failed' }
+    & python -m PyInstaller --onefile --noconfirm --clean --console --exclude-module numpy --name ufc4_fight_report_watcher --paths tools --paths ../scripts --distpath dist --workpath (Join-Path $PSScriptRoot '.build/ufc4-reports') --specpath (Join-Path $PSScriptRoot '.build') tools/watch_fight_reports.py
+    if ($LASTEXITCODE) { throw 'UFC 4 fight-report watcher build failed' }
     Write-Host 'Built UFC 4 overlay prototype in dist.'
-} finally {
+}
+finally {
     Pop-Location
 }
